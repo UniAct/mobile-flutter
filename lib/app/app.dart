@@ -20,6 +20,7 @@ class UniActApp extends StatefulWidget {
 class _UniActAppState extends State<UniActApp> {
   final LocalStorage _localStorage = LocalStorage();
   final ConnectionMonitor _connectionMonitor = ConnectionMonitor();
+  static const Duration _minimumBootstrapDuration = Duration(seconds: 4);
 
   late final Future<Widget> _startScreenFuture;
   StreamSubscription<bool>? _connectionSubscription;
@@ -27,13 +28,18 @@ class _UniActAppState extends State<UniActApp> {
   @override
   void initState() {
     super.initState();
-    _startScreenFuture = getStartScreen();
-    _connectionSubscription = _connectionMonitor.onStatusChanged.listen((isConnected) {
+    _startScreenFuture = _getStartScreenWithMinimumBootstrap();
+    _connectionSubscription = _connectionMonitor.onStatusChanged.listen((
+      isConnected,
+    ) {
       if (!isConnected || !mounted) {
         return;
       }
 
-      AppHelpers.showSuccess(context, 'Connection restored. You are back online.');
+      AppHelpers.showSuccess(
+        context,
+        'Connection restored. You are back online.',
+      );
     });
     _connectionMonitor.start();
   }
@@ -54,6 +60,15 @@ class _UniActAppState extends State<UniActApp> {
     return const LoginScreen();
   }
 
+  Future<Widget> _getStartScreenWithMinimumBootstrap() async {
+    final results = await Future.wait<dynamic>([
+      getStartScreen(),
+      Future<void>.delayed(_minimumBootstrapDuration),
+    ]);
+
+    return results.first as Widget;
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -66,7 +81,10 @@ class _UniActAppState extends State<UniActApp> {
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
             return const Scaffold(
-              body: LoadingIndicator(message: 'Loading app...'),
+              body: LoadingIndicator(
+                message: 'Initializing tenant infrastructure...',
+                variant: LoadingIndicatorVariant.bootstrap,
+              ),
             );
           }
 
