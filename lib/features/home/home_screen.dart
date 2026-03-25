@@ -43,9 +43,11 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     } catch (e) {
       if (mounted) {
+        final message = AppHelpers.userErrorMessage(e);
         setState(() {
-          _error = e.toString();
+          _error = message;
         });
+        AppHelpers.showMessage(context, message);
       }
     } finally {
       if (mounted) {
@@ -66,7 +68,7 @@ class _HomeScreenState extends State<HomeScreen> {
       Navigator.pushReplacementNamed(context, AppRouter.loginRoute);
     } catch (e) {
       if (mounted) {
-        AppHelpers.showMessage(context, e.toString());
+        AppHelpers.showMessage(context, AppHelpers.userErrorMessage(e));
       }
     }
   }

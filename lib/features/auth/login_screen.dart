@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:mobile_flutter/app/router.dart';
 import 'package:mobile_flutter/core/theme/app_theme.dart';
+import 'package:mobile_flutter/core/utils/connection_monitor.dart';
 import 'package:mobile_flutter/core/utils/helpers.dart';
 import 'package:mobile_flutter/core/utils/validators.dart';
 import 'package:mobile_flutter/features/auth/auth_service.dart';
@@ -31,6 +34,7 @@ class _LoginScreenState extends State<LoginScreen>
   List<UniversityModel> _filteredUniversities = const <UniversityModel>[];
   String? _selectedUniversity;
   bool _showUniversitySuggestions = false;
+  StreamSubscription<bool>? _connectionSubscription;
 
   late final AnimationController _animationController;
   late final Animation<double> _fadeAnimation;
@@ -47,20 +51,34 @@ class _LoginScreenState extends State<LoginScreen>
       parent: _animationController,
       curve: Curves.easeOut,
     );
-    _slideAnimation =
-        Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero).animate(
-          CurvedAnimation(
-            parent: _animationController,
-            curve: Curves.easeOutCubic,
-          ),
-        );
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.08),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: Curves.easeOutCubic,
+      ),
+    );
 
     _loadUniversities();
     _animationController.forward();
+    _connectionSubscription = ConnectionMonitor().onStatusChanged.listen((isConnected) {
+      if (!isConnected || !mounted) {
+        return;
+      }
+
+      setState(() {
+        _errorMessage = '';
+      });
+
+      _loadUniversities();
+    });
   }
 
   @override
   void dispose() {
+    _connectionSubscription?.cancel();
     _animationController.dispose();
     _universityController.dispose();
     _emailController.dispose();
@@ -84,9 +102,11 @@ class _LoginScreenState extends State<LoginScreen>
       }
     } catch (e) {
       if (mounted) {
+        final message = AppHelpers.userErrorMessage(e);
         setState(() {
-          _errorMessage = e.toString();
+          _errorMessage = message;
         });
+        AppHelpers.showError(context, message);
       }
     } finally {
       if (mounted) {
@@ -124,13 +144,15 @@ class _LoginScreenState extends State<LoginScreen>
       if (!mounted) {
         return;
       }
+      AppHelpers.showSuccess(context, 'Signed in successfully.');
       Navigator.pushReplacementNamed(context, AppRouter.homeRoute);
     } catch (e) {
       if (mounted) {
+          final message = AppHelpers.userErrorMessage(e);
         setState(() {
-          _errorMessage = e.toString();
+            _errorMessage = message;
         });
-        AppHelpers.showMessage(context, e.toString());
+          AppHelpers.showError(context, message);
       }
     } finally {
       if (mounted) {
