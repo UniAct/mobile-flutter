@@ -5,6 +5,7 @@ class UserModel {
     required this.email,
     required this.universityName,
     required this.roles,
+    this.staffId,
   });
 
   final String userId;
@@ -12,6 +13,7 @@ class UserModel {
   final String email;
   final String universityName;
   final List<String> roles;
+  final int? staffId;
 
   String get primaryRole {
     if (roles.isEmpty) {
@@ -39,6 +41,16 @@ class UserModel {
       universityName: (json['university_name'] ?? json['university'] ?? '')
           .toString(),
       roles: parsedRoles,
+      staffId: _toInt((json['staff'] as Map<String, dynamic>?)?['id']),
     );
+  }
+
+  static int? _toInt(dynamic value) {
+    if (value is int) {
+      return value;
+    }
+
+    final parsed = int.tryParse(value?.toString() ?? '');
+    return parsed != null && parsed > 0 ? parsed : null;
   }
 }

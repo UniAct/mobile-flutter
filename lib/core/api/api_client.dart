@@ -23,7 +23,12 @@ class ApiClient {
     );
 
     try {
-      final response = await http.get(_buildUri(path), headers: requestHeaders);
+      final response = await http
+          .get(_buildUri(path), headers: requestHeaders)
+          .timeout(
+            const Duration(seconds: 5),
+            onTimeout: () => throw SocketException('Connection timeout'),
+          );
       return _handleResponse(response);
     } on SocketException {
       throw AppException(
@@ -47,11 +52,79 @@ class ApiClient {
     );
 
     try {
-      final response = await http.post(
-        _buildUri(path),
-        headers: requestHeaders,
-        body: body == null ? null : jsonEncode(body),
+      final response = await http
+          .post(
+            _buildUri(path),
+            headers: requestHeaders,
+            body: body == null ? null : jsonEncode(body),
+          )
+          .timeout(
+            const Duration(seconds: 5),
+            onTimeout: () => throw SocketException('Connection timeout'),
+          );
+
+      return _handleResponse(response);
+    } on SocketException {
+      throw AppException(
+        'Backend is disconnected. Please make sure the server is running and reachable.',
+        isNetworkError: true,
       );
+    } on http.ClientException catch (e) {
+      throw _mapClientException(e);
+    }
+  }
+
+  Future<dynamic> put(
+    String path, {
+    bool requiresAuth = true,
+    Map<String, String>? headers,
+    Map<String, dynamic>? body,
+  }) async {
+    final requestHeaders = await _buildHeaders(
+      requiresAuth: requiresAuth,
+      extraHeaders: headers,
+    );
+
+    try {
+      final response = await http
+          .put(
+            _buildUri(path),
+            headers: requestHeaders,
+            body: body == null ? null : jsonEncode(body),
+          )
+          .timeout(
+            const Duration(seconds: 5),
+            onTimeout: () => throw SocketException('Connection timeout'),
+          );
+
+      return _handleResponse(response);
+    } on SocketException {
+      throw AppException(
+        'Backend is disconnected. Please make sure the server is running and reachable.',
+        isNetworkError: true,
+      );
+    } on http.ClientException catch (e) {
+      throw _mapClientException(e);
+    }
+  }
+
+  Future<dynamic> delete(
+    String path, {
+    bool requiresAuth = true,
+    Map<String, String>? headers,
+  }) async {
+    final requestHeaders = await _buildHeaders(
+      requiresAuth: requiresAuth,
+      extraHeaders: headers,
+    );
+
+    try {
+      final response = await http
+          .delete(_buildUri(path), headers: requestHeaders)
+          .timeout(
+            const Duration(seconds: 5),
+            onTimeout: () => throw SocketException('Connection timeout'),
+          );
 
       return _handleResponse(response);
     } on SocketException {
@@ -65,8 +138,16 @@ class ApiClient {
   }
 
   Uri _buildUri(String path) {
+    final base = AppConfig.baseUrl;
+    if (base.isEmpty) {
+      throw AppException(
+        'API base URL is not configured. Check your .env file.',
+        isNetworkError: true,
+      );
+    }
+
     final normalizedPath = path.startsWith('/') ? path : '/$path';
-    return Uri.parse('${AppConfig.baseUrl}$normalizedPath');
+    return Uri.parse('$base$normalizedPath');
   }
 
   Future<Map<String, String>> _buildHeaders({
@@ -120,7 +201,8 @@ class ApiClient {
       );
     }
 
-    if (lower.contains('failed host lookup') || lower.contains('network is unreachable')) {
+    if (lower.contains('failed host lookup') ||
+        lower.contains('network is unreachable')) {
       return AppException(
         'No internet connection. Please check your network and try again.',
         isNetworkError: true,
@@ -137,6 +219,14 @@ class ApiClient {
     if (payload is! Map<String, dynamic>) {
       return null;
     }
+
+    // Handle structured validation responses from backend Zod validator
+    // e.g. { status: 'fail', data: { body: { field: { _errors: [...] } } } }
+    try {
+      if (payload['status'] == 'fail' && payload['data'] != null) {
+        return jsonEncode(payload['data']);
+      }
+    } catch (_) {}
 
     final direct = payload['message'] ?? payload['error'];
     if (direct != null && direct.toString().trim().isNotEmpty) {

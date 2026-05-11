@@ -21,6 +21,7 @@ class ConnectionMonitor {
   bool _isStarted = false;
 
   Stream<bool> get onStatusChanged => _statusController.stream;
+  bool? get lastKnownStatus => _lastKnownConnected;
 
   void start() {
     if (_isStarted) {
@@ -37,28 +38,32 @@ class ConnectionMonitor {
     _isStarted = false;
   }
 
+  Future<bool> checkNow() async {
+    final connected = await _isBackendReachable();
+    if (_lastKnownConnected == null || connected != _lastKnownConnected) {
+      _lastKnownConnected = connected;
+      _statusController.add(connected);
+    }
+    return connected;
+  }
+
   void dispose() {
     stop();
     _statusController.close();
   }
 
   Future<void> _checkStatus() async {
-    final connected = await _isBackendReachable();
-
-    if (_lastKnownConnected == null) {
-      _lastKnownConnected = connected;
-      return;
-    }
-
-    if (connected != _lastKnownConnected) {
-      _lastKnownConnected = connected;
-      _statusController.add(connected);
-    }
+    await checkNow();
   }
 
   Future<bool> _isBackendReachable() async {
+    final base = AppConfig.baseUrl;
+    if (base.isEmpty) {
+      return false;
+    }
+
     try {
-      final uri = Uri.parse('${AppConfig.baseUrl}/university/list');
+      final uri = Uri.parse('$base/university/list');
       final response = await http.get(uri).timeout(_timeout);
       return response.statusCode < 500;
     } catch (_) {

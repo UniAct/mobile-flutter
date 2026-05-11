@@ -144,7 +144,6 @@ class _LoginScreenState extends State<LoginScreen>
       if (!mounted) {
         return;
       }
-      AppHelpers.showSuccess(context, 'Signed in successfully.');
       Navigator.pushReplacementNamed(context, AppRouter.homeRoute);
     } catch (e) {
       if (mounted) {

@@ -5,7 +5,6 @@ import 'package:mobile_flutter/app/router.dart';
 import 'package:mobile_flutter/core/storage/local_storage.dart';
 import 'package:mobile_flutter/core/theme/app_theme.dart';
 import 'package:mobile_flutter/core/utils/connection_monitor.dart';
-import 'package:mobile_flutter/core/utils/helpers.dart';
 import 'package:mobile_flutter/core/widgets/loading_indicator.dart';
 import 'package:mobile_flutter/features/auth/login_screen.dart';
 import 'package:mobile_flutter/features/home/home_screen.dart';
@@ -20,7 +19,6 @@ class UniActApp extends StatefulWidget {
 class _UniActAppState extends State<UniActApp> {
   final LocalStorage _localStorage = LocalStorage();
   final ConnectionMonitor _connectionMonitor = ConnectionMonitor();
-  static const Duration _minimumBootstrapDuration = Duration(seconds: 4);
 
   late final Future<Widget> _startScreenFuture;
   StreamSubscription<bool>? _connectionSubscription;
@@ -28,20 +26,24 @@ class _UniActAppState extends State<UniActApp> {
   @override
   void initState() {
     super.initState();
-    _startScreenFuture = _getStartScreenWithMinimumBootstrap();
-    _connectionSubscription = _connectionMonitor.onStatusChanged.listen((
-      isConnected,
-    ) {
-      if (!isConnected || !mounted) {
+    _startScreenFuture = _getStartScreen();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
         return;
       }
 
-      AppHelpers.showSuccess(
-        context,
-        'Connection restored. You are back online.',
-      );
+      _connectionSubscription = _connectionMonitor.onStatusChanged.listen((
+        isConnected,
+      ) {
+        if (!isConnected || !mounted) {
+          return;
+        }
+
+        // Connection restored - update state silently, do NOT show toast during startup
+        debugPrint('[UniActApp] Connection restored - online');
+      });
+      _connectionMonitor.start();
     });
-    _connectionMonitor.start();
   }
 
   @override
@@ -52,21 +54,24 @@ class _UniActAppState extends State<UniActApp> {
   }
 
   Future<Widget> getStartScreen() async {
-    final token = await _localStorage.getToken();
-    if (token != null && token.isNotEmpty) {
-      return const HomeScreen();
+    try {
+      final token = await _localStorage.getToken();
+      if (token != null && token.isNotEmpty) {
+        return const HomeScreen();
+      }
+    } catch (e) {
+      debugPrint('[UniActApp] Error checking token: $e');
     }
-
     return const LoginScreen();
   }
 
-  Future<Widget> _getStartScreenWithMinimumBootstrap() async {
-    final results = await Future.wait<dynamic>([
-      getStartScreen(),
-      Future<void>.delayed(_minimumBootstrapDuration),
-    ]);
-
-    return results.first as Widget;
+  Future<Widget> _getStartScreen() async {
+    try {
+      return await getStartScreen();
+    } catch (e) {
+      debugPrint('[UniActApp] Error getting start screen: $e');
+      return const LoginScreen();
+    }
   }
 
   @override
@@ -82,8 +87,7 @@ class _UniActAppState extends State<UniActApp> {
           if (snapshot.connectionState != ConnectionState.done) {
             return const Scaffold(
               body: LoadingIndicator(
-                message: 'Initializing tenant infrastructure...',
-                variant: LoadingIndicatorVariant.bootstrap,
+                message: 'Loading...',
               ),
             );
           }

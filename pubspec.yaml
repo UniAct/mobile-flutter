@@ -2,7 +2,7 @@ name: mobile_flutter
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
 # The following defines the version and build number for your application.
 # A version number is three numbers separated by dots, like 1.2.43
@@ -33,14 +33,33 @@ dependencies:
   http: ^1.2.2
   shared_preferences: ^2.3.3
   flutter_dotenv: ^5.2.1
+  sqflite: ^2.4.1
+  sqflite_common_ffi: ^2.3.6
+  sqflite_sqlcipher: ^2.0.0
+  path: ^1.9.0
+  mobile_scanner: ^7.1.2
+  qr_flutter: ^4.1.0
+  intl: ^0.20.2
+  connectivity_plus: ^6.0.0
+  drift: ^2.14.0
+  sqlite3_flutter_libs: ^0.5.22
+  flutter_bloc: ^8.1.4
+  bloc: ^8.1.2
+  path_provider: ^2.1.2
+  equatable: ^2.0.5
+
+  # Security Packages
+  flutter_secure_storage: ^9.2.2
+  crypto: ^3.0.3
 
   # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  drift_dev: ^2.14.0
+  build_runner: ^2.4.8
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -54,7 +73,6 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
-
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.

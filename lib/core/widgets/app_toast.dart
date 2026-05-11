@@ -7,44 +7,54 @@ enum AppToastType { success, error, info }
 class AppToast {
   static OverlayEntry? _currentEntry;
 
-  static void show(
+static void show(
     BuildContext context, {
     required String message,
     required AppToastType type,
     Duration duration = const Duration(seconds: 3),
   }) {
-    final overlay = Overlay.of(context, rootOverlay: true);
+    try {
+      final overlay = Overlay.maybeOf(context, rootOverlay: true);
 
-    _currentEntry?.remove();
-    _currentEntry = null;
+      if (overlay == null) {
+        debugPrint('[AppToast] Overlay unavailable, skipping: $message');
+        return;
+      }
 
-    late final OverlayEntry entry;
-    entry = OverlayEntry(
-      builder: (context) {
-        final media = MediaQuery.of(context);
-        final maxWidth = media.size.width < 420 ? media.size.width - 24 : 380.0;
+      _currentEntry?.remove();
+      _currentEntry = null;
 
-        return Positioned(
-          top: media.padding.top + 12,
-          right: 12,
-          child: _ToastCard(
-            message: message,
-            type: type,
-            maxWidth: maxWidth,
-            duration: duration,
-            onDismissed: () {
-              if (_currentEntry == entry) {
-                _currentEntry = null;
-              }
-              entry.remove();
-            },
-          ),
-        );
-      },
-    );
+      late final OverlayEntry entry;
+      entry = OverlayEntry(
+        builder: (context) {
+          final media = MediaQuery.of(context);
+          final maxWidth = media.size.width < 420 ? media.size.width - 24 : 380.0;
 
-    _currentEntry = entry;
-    overlay.insert(entry);
+          return Positioned(
+            top: media.padding.top + 12,
+            right: 12,
+            child: _ToastCard(
+              message: message,
+              type: type,
+              maxWidth: maxWidth,
+              duration: duration,
+              onDismissed: () {
+                if (_currentEntry == entry) {
+                  _currentEntry = null;
+                }
+                entry.remove();
+              },
+            ),
+          );
+        },
+      );
+
+      _currentEntry = entry;
+      overlay.insert(entry);
+    } catch (e) {
+      // Never throw from toast - fail silently
+      debugPrint('[AppToast] Failed to show toast: $e');
+    }
   }
 }
 

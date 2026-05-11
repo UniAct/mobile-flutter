@@ -7,6 +7,6 @@ void main() {
   ) async {
     await tester.pumpWidget(const UniActApp());
 
-    expect(find.text('Loading app...'), findsOneWidget);
+    expect(find.text('Loading...'), findsOneWidget);
   });
 }
