@@ -9,6 +9,7 @@ import 'package:mobile_flutter/core/utils/helpers.dart';
 import 'package:mobile_flutter/core/widgets/app_button.dart';
 import 'package:mobile_flutter/core/widgets/app_card.dart';
 import 'package:mobile_flutter/core/widgets/attendance_skeleton_loader.dart';
+import 'package:mobile_flutter/core/widgets/sync_status_widget.dart';
 import 'package:mobile_flutter/features/attendance/attendance_dependencies.dart';
 import 'package:mobile_flutter/features/attendance/attendance_models.dart';
 import 'package:mobile_flutter/features/attendance/bloc/attendance_bloc.dart';
@@ -55,12 +56,16 @@ class _AttendanceScreenState extends State<AttendanceScreen>
 
     // Get singleton scanner service (shared across app)
     _scannerService = widget.dependencies.scannerService;
+
+    if (_isQrSupported) {
+      unawaited(_scannerService?.startScanning());
+    }
   }
 
   @override
   void dispose() {
     // Stop scanning (but don't dispose singleton - other screens may use it)
-    if (_isQrSupported && _scanBusy == false) {
+    if (_isQrSupported) {
       unawaited(_scannerService?.stopScanning());
     }
     WidgetsBinding.instance.removeObserver(this);
@@ -75,6 +80,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
     if (_isQrSupported) {
       switch (state) {
         case AppLifecycleState.resumed:
+          unawaited(_scannerService?.startScanning());
           break;
         case AppLifecycleState.paused:
           unawaited(_scannerService?.stopScanning());
@@ -99,10 +105,16 @@ class _AttendanceScreenState extends State<AttendanceScreen>
             return;
           }
 
-          if (state.toastIsSuccess) {
-            AppHelpers.showSuccess(context, message);
-          } else {
-            AppHelpers.showError(context, message);
+          switch (state.toastType) {
+            case AttendanceToastType.success:
+              AppHelpers.showSuccess(context, message);
+              break;
+            case AttendanceToastType.warning:
+              AppHelpers.showWarning(context, message);
+              break;
+            case AttendanceToastType.error:
+              AppHelpers.showError(context, message);
+              break;
           }
         },
         builder: (context, state) {
@@ -124,6 +136,13 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                       child: Column(
                         children: [
                           _buildStatusBanner(context, state),
+                          SyncStatusWidget(
+                            status: state.syncState,
+                            isOnline: state.isOnline,
+                            onRetry: () => context.read<AttendanceBloc>().add(
+                              const AttendanceSyncRequested(),
+                            ),
+                          ),
                           const TabBar(
                             tabs: [
                               Tab(text: 'Manual'),
@@ -157,51 +176,98 @@ class _AttendanceScreenState extends State<AttendanceScreen>
   }
 
   Widget _buildStatusBanner(BuildContext context, AttendanceState state) {
-    final bannerColor = state.isOnline
-        ? const Color(0xFF15803D)
-        : const Color(0xFFB45309);
-    final bannerText = state.isOnline ? 'Online' : 'Offline mode';
-    final syncText = switch (state.syncState) {
-      SyncState.syncing => 'Syncing...',
-      SyncState.partialSuccess => 'Some items synced',
-      SyncState.success => 'Synced',
-      SyncState.error => 'Sync error',
-      SyncState.idle =>
-        state.pendingSyncCount > 0
-            ? 'Pending sync: ${state.pendingSyncCount}'
-            : 'Idle',
-    };
+    final isClean =
+        state.isOnline &&
+        state.pendingSyncCount == 0 &&
+        state.syncState != SyncState.syncing &&
+        state.syncState != SyncState.failed;
+    if (isClean) {
+      return const SizedBox.shrink();
+    }
 
+    if (!state.isOnline) {
+      return _buildPill(
+        context,
+        icon: Icons.cloud_off_rounded,
+        label: state.pendingSyncCount > 0
+            ? '${state.pendingSyncCount} record(s) saved locally - will sync when online'
+            : 'Offline mode',
+        color: const Color(0xFFB45309),
+      );
+    }
+
+    if (state.syncState == SyncState.syncing) {
+      return _buildPill(
+        context,
+        icon: Icons.sync_rounded,
+        label: 'Syncing...',
+        color: AppColors.primary,
+        spinner: true,
+      );
+    }
+
+    if (state.syncState == SyncState.failed) {
+      return GestureDetector(
+        onTap: () =>
+            context.read<AttendanceBloc>().add(const AttendanceSyncRequested()),
+        child: _buildPill(
+          context,
+          icon: Icons.error_outline_rounded,
+          label: 'Sync failed - tap to retry',
+          color: AppColors.error,
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
+  }
+
+  Widget _buildPill(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required Color color,
+    bool spinner = false,
+  }) {
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.all(AppSpacing.sm),
+      margin: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        AppSpacing.sm,
+        AppSpacing.md,
+        AppSpacing.xs,
+      ),
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.md,
         vertical: AppSpacing.sm,
       ),
       decoration: BoxDecoration(
-        color: bannerColor.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: bannerColor.withValues(alpha: 0.25)),
+        color: color.withValues(alpha: 0.09),
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Row(
         children: [
-          Icon(Icons.cloud_off_rounded, color: bannerColor, size: 18),
-          const SizedBox(width: 8),
+          spinner
+              ? SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: color,
+                  ),
+                )
+              : Icon(icon, size: 16, color: color),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
-              '$bannerText • $syncText',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: bannerColor,
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: color,
                 fontWeight: FontWeight.w600,
               ),
             ),
           ),
-          if (state.pendingSyncCount > 0)
-            Chip(
-              label: Text('${state.pendingSyncCount} unsynced'),
-              visualDensity: VisualDensity.compact,
-            ),
         ],
       ),
     );
@@ -210,94 +276,101 @@ class _AttendanceScreenState extends State<AttendanceScreen>
   Widget _buildStudentView(BuildContext context, AttendanceState state) {
     final data = state.studentData;
 
-    return ListView(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      children: [
-        _buildStatusBanner(context, state),
-        AppCard(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
+    return RefreshIndicator(
+      onRefresh: () async {
+        context.read<AttendanceBloc>().add(const AttendanceSyncRequested());
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+      },
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(AppSpacing.md),
+        children: [
+          _buildStatusBanner(context, state),
+          AppCard(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'My Attendance',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          const SizedBox(height: 6),
+                          Text('Semester #${state.semesterId}'),
+                        ],
+                      ),
+                    ),
+                    if (state.loadingStudentStatus)
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation(
+                            Theme.of(context).primaryColor,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Builder(
+                  builder: (context) {
+                    final hasQr =
+                        data?.qrPayload != null && data!.qrPayload.isNotEmpty;
+                    final isLoading = state.loadingStudentStatus;
+                    final qrPayload = data?.qrPayload ?? '';
+
+                    return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'My Attendance',
-                          style: Theme.of(context).textTheme.titleLarge,
+                        AppButton(
+                          text: 'View My QR-Code',
+                          icon: Icons.qr_code_2_rounded,
+                          isLoading: isLoading,
+                          onPressed: hasQr
+                              ? () => _showMyQrCode(qrPayload)
+                              : null,
                         ),
-                        const SizedBox(height: 6),
-                        Text('Semester #${state.semesterId}'),
+                        if (!isLoading && !hasQr) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            state.isOnline
+                                ? 'Loading your QR code...'
+                                : 'QR code unavailable offline. Connect once to download it.',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                          ),
+                        ],
                       ],
-                    ),
-                  ),
-                  if (state.loadingStudentStatus)
-                    SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation(
-                          Theme.of(context).primaryColor,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Builder(
-                builder: (context) {
-                  final hasQr =
-                      data?.qrPayload != null && data!.qrPayload.isNotEmpty;
-                  final isLoading = state.loadingStudentStatus;
-                  final qrPayload = data?.qrPayload ?? '';
-
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      AppButton(
-                        text: 'View My QR-Code',
-                        icon: Icons.qr_code_2_rounded,
-                        isLoading: isLoading,
-                        onPressed: hasQr
-                            ? () => _showMyQrCode(qrPayload)
-                            : null,
-                      ),
-                      if (!isLoading && !hasQr) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          state.isOnline
-                              ? 'Loading your QR code...'
-                              : 'QR code unavailable offline. Connect once to download it.',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: Theme.of(context).colorScheme.error,
-                              ),
-                        ),
-                      ],
-                    ],
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: AppSpacing.md),
-        if (data == null && !state.loadingStudentStatus)
-          AppCard(
-            child: Text(
-              state.isOnline
-                  ? 'No cached attendance found yet. It will appear here after the first successful sync.'
-                  : 'No cached attendance found yet. Connect once to download your attendance history.',
+                    );
+                  },
+                ),
+              ],
             ),
-          )
-        else if (data != null)
-          ...data.timeline.map(_buildStudentAttendanceTile),
-        SizedBox(height: MediaQuery.of(context).viewPadding.bottom + 16),
-      ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          if (data == null && !state.loadingStudentStatus)
+            AppCard(
+              child: Text(
+                state.isOnline
+                    ? 'No cached attendance found yet. It will appear here after the first successful sync.'
+                    : 'No cached attendance found yet. Connect once to download your attendance history.',
+              ),
+            )
+          else if (data != null)
+            ...data.timeline.map(_buildStudentAttendanceTile),
+          SizedBox(height: MediaQuery.of(context).viewPadding.bottom + 16),
+        ],
+      ),
     );
   }
 
@@ -394,50 +467,57 @@ class _AttendanceScreenState extends State<AttendanceScreen>
     AttendanceState state, {
     required bool isCompact,
   }) {
-    return ListView(
-      padding: EdgeInsets.all(isCompact ? AppSpacing.sm : AppSpacing.md),
-      children: [
-        _buildAttendanceDateCard(context, state, isCompact: isCompact),
-        SizedBox(height: isCompact ? AppSpacing.sm : AppSpacing.md),
-        _buildCourseSelectorCard(context, state),
-        SizedBox(height: isCompact ? AppSpacing.sm : AppSpacing.md),
-        if (state.courses.isEmpty)
-          AppCard(
-            child: Text(
-              state.isOnline
-                  ? 'No assigned classes found for this staff member.'
-                  : 'No cached classes available yet. Connect once to download your assigned classes.',
-            ),
-          )
-        else if (state.students.isEmpty)
-          AppCard(
-            child: Text(
-              state.loadingStudents
-                  ? 'Loading enrolled students...'
-                  : state.selectedCourse == null
-                  ? 'Choose a class to load the roster.'
-                  : 'No enrolled students found for this class.',
-            ),
-          )
-        else ...[
-          _buildMarkAllButtonsCard(context, isCompact: isCompact),
-          const SizedBox(height: AppSpacing.sm),
-          _buildPaginatedStudentList(context, state),
-          const SizedBox(height: AppSpacing.sm),
-          _buildPaginationControls(context, state),
+    return RefreshIndicator(
+      onRefresh: () async {
+        context.read<AttendanceBloc>().add(const AttendanceSyncRequested());
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+      },
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.all(isCompact ? AppSpacing.sm : AppSpacing.md),
+        children: [
+          _buildAttendanceDateCard(context, state, isCompact: isCompact),
+          SizedBox(height: isCompact ? AppSpacing.sm : AppSpacing.md),
+          _buildCourseSelectorCard(context, state),
+          SizedBox(height: isCompact ? AppSpacing.sm : AppSpacing.md),
+          if (state.courses.isEmpty)
+            AppCard(
+              child: Text(
+                state.isOnline
+                    ? 'No assigned classes found for this staff member.'
+                    : 'No cached classes available yet. Connect once to download your assigned classes.',
+              ),
+            )
+          else if (state.students.isEmpty)
+            AppCard(
+              child: Text(
+                state.loadingStudents
+                    ? 'Loading enrolled students...'
+                    : state.selectedCourse == null
+                    ? 'Choose a class to load the roster.'
+                    : 'No enrolled students found for this class.',
+              ),
+            )
+          else ...[
+            _buildMarkAllButtonsCard(context, isCompact: isCompact),
+            const SizedBox(height: AppSpacing.sm),
+            _buildPaginatedStudentList(context, state),
+            const SizedBox(height: AppSpacing.sm),
+            _buildPaginationControls(context, state),
+          ],
+          SizedBox(height: isCompact ? AppSpacing.sm : AppSpacing.md),
+          AppButton(
+            text: 'Submit Manual Attendance',
+            isLoading: state.isSaving,
+            onPressed: state.students.isEmpty || state.selectedCourse == null
+                ? null
+                : () => context.read<AttendanceBloc>().add(
+                    const AttendanceManualSubmitted(),
+                  ),
+          ),
+          SizedBox(height: MediaQuery.of(context).viewPadding.bottom + 16),
         ],
-        SizedBox(height: isCompact ? AppSpacing.sm : AppSpacing.md),
-        AppButton(
-          text: 'Submit Manual Attendance',
-          isLoading: state.isSaving,
-          onPressed: state.students.isEmpty || state.selectedCourse == null
-              ? null
-              : () => context.read<AttendanceBloc>().add(
-                  const AttendanceManualSubmitted(),
-                ),
-        ),
-        SizedBox(height: MediaQuery.of(context).viewPadding.bottom + 16),
-      ],
+      ),
     );
   }
 
@@ -448,99 +528,107 @@ class _AttendanceScreenState extends State<AttendanceScreen>
   }) {
     final scannerHeight = isCompact ? 220.0 : 300.0;
 
-    return ListView(
-      padding: EdgeInsets.all(isCompact ? AppSpacing.sm : AppSpacing.md),
-      children: [
-        _buildAttendanceDateCard(context, state, isCompact: isCompact),
-        SizedBox(height: isCompact ? AppSpacing.sm : AppSpacing.md),
-        _buildCourseSelectorCard(context, state),
-        SizedBox(height: isCompact ? AppSpacing.sm : AppSpacing.md),
-        AppCard(
-          padding: const EdgeInsets.all(AppSpacing.sm),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.accent.withValues(alpha: 0.18),
-                      borderRadius: BorderRadius.circular(AppRadius.sm),
+    return RefreshIndicator(
+      onRefresh: () async {
+        context.read<AttendanceBloc>().add(const AttendanceSyncRequested());
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+      },
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.all(isCompact ? AppSpacing.sm : AppSpacing.md),
+        children: [
+          _buildAttendanceDateCard(context, state, isCompact: isCompact),
+          SizedBox(height: isCompact ? AppSpacing.sm : AppSpacing.md),
+          _buildCourseSelectorCard(context, state),
+          SizedBox(height: isCompact ? AppSpacing.sm : AppSpacing.md),
+          AppCard(
+            padding: const EdgeInsets.all(AppSpacing.sm),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.accent.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(AppRadius.sm),
+                      ),
+                      child: const Icon(
+                        Icons.qr_code_2_rounded,
+                        color: AppColors.primary,
+                      ),
                     ),
-                    child: const Icon(
-                      Icons.qr_code_2_rounded,
-                      color: AppColors.primary,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Scan Student QR-Code',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
+                  ],
+                ),
+                const SizedBox(height: 10),
+                if (!_isQrSupported || _scannerService == null)
+                  AppCard(
+                    padding: const EdgeInsets.all(AppSpacing.sm),
                     child: Text(
-                      'Scan Student QR-Code',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
+                      'QR scanning is available on Android and iOS devices only.',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  )
+                else
+                  SizedBox(
+                    height: scannerHeight,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(AppRadius.md),
+                      child: MobileScanner(
+                        // Use singleton controller - prevents camera recreation
+                        controller: _scannerService!.controller,
+                        onDetect: (capture) {
+                          if (_scanBusy) {
+                            return;
+                          }
+
+                          final barcodes = capture.barcodes;
+                          if (barcodes.isEmpty) {
+                            return;
+                          }
+
+                          final raw = barcodes.first.rawValue;
+                          if (raw == null || raw.isEmpty) {
+                            return;
+                          }
+
+                          setState(() {
+                            _scanBusy = true;
+                          });
+                          unawaited(_scannerService?.stopScanning());
+                          context.read<AttendanceBloc>().add(
+                            AttendanceQrSubmitted(raw),
+                          );
+                          Future<void>.delayed(
+                            const Duration(milliseconds: 1400),
+                            () {
+                              if (mounted) {
+                                setState(() {
+                                  _scanBusy = false;
+                                });
+                                unawaited(_scannerService?.startScanning());
+                              }
+                            },
+                          );
+                        },
                       ),
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              if (!_isQrSupported || _scannerService == null)
-                AppCard(
-                  padding: const EdgeInsets.all(AppSpacing.sm),
-                  child: Text(
-                    'QR scanning is available on Android and iOS devices only.',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                )
-              else
-                SizedBox(
-                  height: scannerHeight,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(AppRadius.md),
-                    child: MobileScanner(
-                      // Use singleton controller - prevents camera recreation
-                      controller: _scannerService!.controller,
-                      onDetect: (capture) {
-                        if (_scanBusy) {
-                          return;
-                        }
-
-                        final barcodes = capture.barcodes;
-                        if (barcodes.isEmpty) {
-                          return;
-                        }
-
-                        final raw = barcodes.first.rawValue;
-                        if (raw == null || raw.isEmpty) {
-                          return;
-                        }
-
-                        setState(() {
-                          _scanBusy = true;
-                        });
-                        context.read<AttendanceBloc>().add(
-                          AttendanceQrSubmitted(raw),
-                        );
-                        Future<void>.delayed(
-                          const Duration(milliseconds: 900),
-                          () {
-                            if (mounted) {
-                              setState(() {
-                                _scanBusy = false;
-                              });
-                            }
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                ),
-            ],
+              ],
+            ),
           ),
-        ),
-        SizedBox(height: MediaQuery.of(context).viewPadding.bottom + 16),
-      ],
+          SizedBox(height: MediaQuery.of(context).viewPadding.bottom + 16),
+        ],
+      ),
     );
   }
 

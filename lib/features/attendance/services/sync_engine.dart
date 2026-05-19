@@ -57,6 +57,10 @@ class SyncEngine {
     _connectivitySubscription = connectivityRepository.onConnectivityChanged
         .listen((isConnected) {
           debugPrint('[SyncEngine] Connectivity changed: $isConnected');
+          if (!isConnected) {
+            _syncStateController.add(SyncStatus.offline);
+            return;
+          }
           if (isConnected && !_isSyncing) {
             // Immediate sync when connection restored
             syncNow();
@@ -106,8 +110,13 @@ class SyncEngine {
       return;
     }
 
+    if (!await connectivityRepository.isConnected()) {
+      _syncStateController.add(SyncStatus.offline);
+      return;
+    }
+
     _isSyncing = true;
-    _syncStateController.add(SyncState.syncing);
+    _syncStateController.add(SyncStatus.syncing);
 
     try {
       // ───────────────────────────────────────────
@@ -136,11 +145,11 @@ class SyncEngine {
       // ───────────────────────────────────────────
       await _cleanupOldQueueItems();
 
-      _syncStateController.add(SyncState.success);
+      _syncStateController.add(SyncStatus.synced);
       debugPrint('[SyncEngine] Full sync cycle complete');
     } catch (e) {
       debugPrint('[SyncEngine] Sync error: $e');
-      _syncStateController.add(SyncState.error);
+      _syncStateController.add(SyncStatus.failed);
     } finally {
       _isSyncing = false;
     }
@@ -523,7 +532,7 @@ class SyncEngine {
   /// Process pending sync queue (Local → Server)
   Future<void> _processQueue() async {
     final pendingItems = await syncRepository.getPendingItems();
-    final failedItems = await syncRepository.getFailedItems(maxRetries: 5);
+    final failedItems = await syncRepository.getFailedItems(maxRetries: 3);
     final now = DateTime.now();
     final dueForRetry = failedItems
         .where(
@@ -546,8 +555,9 @@ class SyncEngine {
     int failedCount = 0;
 
     for (final item in allItems) {
-      if (item.retryCount >= 5) {
+      if (item.retryCount >= 3) {
         debugPrint('[SyncEngine] Item ${item.id} exceeded max retries');
+        await syncRepository.markAsFailed(item.id, 'Retry limit reached.');
         failedCount++;
         continue;
       }
@@ -567,7 +577,7 @@ class SyncEngine {
         await syncRepository.markAsFailed(item.id, e.message);
         failedCount++;
 
-        if (retryService.shouldRetry(item.retryCount)) {
+        if (retryService.shouldRetry(item.retryCount) && item.retryCount < 3) {
           final delay = retryService.getNextRetryDelay(item.retryCount);
           debugPrint(
             '[SyncEngine] Item ${item.id} will retry in ${delay.inSeconds}s',
@@ -594,7 +604,8 @@ class SyncEngine {
       batch.deleteWhere(
         database.syncQueues,
         (tbl) =>
-            tbl.syncStatus.equals('success') &
+            (tbl.syncStatus.equals('success') |
+                tbl.syncStatus.equals('synced')) &
             tbl.actionType.isNotIn(['_sync_meta', 'delta_sync']) &
             tbl.createdAt.isSmallerThanValue(thirtyDaysAgo),
       );
@@ -630,20 +641,22 @@ class SyncEngine {
 // SYNC STATE (UI consumption)
 // ─────────────────────────────────────────────
 
-enum SyncState { idle, syncing, success, partialSuccess, error }
+enum SyncStatus { idle, offline, syncing, synced, failed }
 
-extension SyncStateExtension on SyncState {
+typedef SyncState = SyncStatus;
+
+extension SyncStatusExtension on SyncStatus {
   String get label {
     switch (this) {
-      case SyncState.idle:
+      case SyncStatus.idle:
         return 'Idle';
-      case SyncState.syncing:
+      case SyncStatus.offline:
+        return 'Saved offline';
+      case SyncStatus.syncing:
         return 'Syncing...';
-      case SyncState.success:
+      case SyncStatus.synced:
         return 'Synced';
-      case SyncState.partialSuccess:
-        return 'Partial Sync';
-      case SyncState.error:
+      case SyncStatus.failed:
         return 'Sync Error';
     }
   }

@@ -8,7 +8,7 @@ class SyncQueueModel extends Equatable {
   final int entityId;
   final String payloadJson;
   final DateTime createdAt;
-  final String syncStatus; // pending, syncing, success, failed
+  final String syncStatus; // pending, syncing, synced, failed
   final int retryCount;
   final String? lastError;
   final DateTime? lastRetryAt;
@@ -30,7 +30,7 @@ class SyncQueueModel extends Equatable {
 
   bool get isPending => syncStatus == 'pending';
   bool get isSyncing => syncStatus == 'syncing';
-  bool get isSuccess => syncStatus == 'success';
+  bool get isSuccess => syncStatus == 'synced' || syncStatus == 'success';
   bool get isFailed => syncStatus == 'failed';
 
   SyncQueueModel copyWith({

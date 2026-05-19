@@ -75,22 +75,22 @@ class Student extends Equatable {
 
   @override
   List<Object?> get props => [
-        id,
-        universityStudentId,
-        qrCode,
-        fullName,
-        email,
-        universityId,
-        programId,
-        currentSemester,
-        offlineUuid,
-        deviceId,
-        isActive,
-        isDeleted,
-        createdAt,
-        updatedAt,
-        lastSeenAt,
-      ];
+    id,
+    universityStudentId,
+    qrCode,
+    fullName,
+    email,
+    universityId,
+    programId,
+    currentSemester,
+    offlineUuid,
+    deviceId,
+    isActive,
+    isDeleted,
+    createdAt,
+    updatedAt,
+    lastSeenAt,
+  ];
 
   factory Student.fromJson(Map<String, dynamic> json) {
     return Student(

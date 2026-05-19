@@ -73,6 +73,10 @@ class AttendanceDatabase extends _$AttendanceDatabase {
       onCreate: (Migrator m) async {
         await m.createAll();
       },
+      beforeOpen: (details) async {
+        await customStatement('PRAGMA foreign_keys = ON;');
+        await customStatement('PRAGMA journal_mode = WAL;');
+      },
       onUpgrade: (Migrator m, int from, int to) async {
         if (from < 2) {
           await m.createTable(sessionSnapshots);

@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 /// Conflict resolver using timestamp-based strategy
-/// 
+///
 /// Rules:
 /// - Latest update always wins (compare updated_at timestamps)
 /// - If local is newer: Don't update, let background sync upload local version
@@ -17,17 +17,11 @@ class ConflictResolver {
     final isServerNewer = serverUpdatedAt.isAfter(localUpdatedAt);
 
     if (isServerNewer) {
-      debugPrint(
-        '[ConflictResolver] Server version is newer, updating local',
-      );
+      debugPrint('[ConflictResolver] Server version is newer, updating local');
     } else if (serverUpdatedAt.isBefore(localUpdatedAt)) {
-      debugPrint(
-        '[ConflictResolver] Local version is newer, keeping local',
-      );
+      debugPrint('[ConflictResolver] Local version is newer, keeping local');
     } else {
-      debugPrint(
-        '[ConflictResolver] Timestamps equal, keeping local',
-      );
+      debugPrint('[ConflictResolver] Timestamps equal, keeping local');
     }
 
     return isServerNewer;
@@ -43,7 +37,9 @@ class ConflictResolver {
   }) {
     try {
       final localUpdatedAt = DateTime.parse(local[localTimestampField] ?? '');
-      final serverUpdatedAt = DateTime.parse(server[serverTimestampField] ?? '');
+      final serverUpdatedAt = DateTime.parse(
+        server[serverTimestampField] ?? '',
+      );
 
       if (shouldUpdateLocalFromServer(
         localUpdatedAt: localUpdatedAt,

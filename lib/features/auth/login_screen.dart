@@ -43,6 +43,7 @@ class _LoginScreenState extends State<LoginScreen>
   @override
   void initState() {
     super.initState();
+    AppRouter.isOnLoginRoute = true;
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 520),
@@ -51,19 +52,19 @@ class _LoginScreenState extends State<LoginScreen>
       parent: _animationController,
       curve: Curves.easeOut,
     );
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.08),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeOutCubic,
-      ),
-    );
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: Curves.easeOutCubic,
+          ),
+        );
 
     _loadUniversities();
     _animationController.forward();
-    _connectionSubscription = ConnectionMonitor().onStatusChanged.listen((isConnected) {
+    _connectionSubscription = ConnectionMonitor().onStatusChanged.listen((
+      isConnected,
+    ) {
       if (!isConnected || !mounted) {
         return;
       }
@@ -78,6 +79,7 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   void dispose() {
+    AppRouter.isOnLoginRoute = false;
     _connectionSubscription?.cancel();
     _animationController.dispose();
     _universityController.dispose();
@@ -96,6 +98,8 @@ class _LoginScreenState extends State<LoginScreen>
       final universities = await _universityService.getUniversities();
       if (mounted) {
         setState(() {
+          // Keep typed login credentials intact; university loading only updates
+          // selector options and error UI.
           _universities = universities;
           _filteredUniversities = universities;
         });
@@ -104,6 +108,8 @@ class _LoginScreenState extends State<LoginScreen>
       if (mounted) {
         final message = AppHelpers.userErrorMessage(e);
         setState(() {
+          // Do not clear email/password here. setState preserves the controller
+          // instances owned by _LoginScreenState.
           _errorMessage = message;
         });
         AppHelpers.showError(context, message);
@@ -147,11 +153,11 @@ class _LoginScreenState extends State<LoginScreen>
       Navigator.pushReplacementNamed(context, AppRouter.homeRoute);
     } catch (e) {
       if (mounted) {
-          final message = AppHelpers.userErrorMessage(e);
+        final message = AppHelpers.userErrorMessage(e);
         setState(() {
-            _errorMessage = message;
+          _errorMessage = message;
         });
-          AppHelpers.showError(context, message);
+        AppHelpers.showError(context, message);
       }
     } finally {
       if (mounted) {
@@ -194,7 +200,7 @@ class _LoginScreenState extends State<LoginScreen>
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFFEFF6FF), Color(0xFFF8F9FB), Color(0xFFDBEAFE)],
+            colors: [Color(0xFFE8F7F4), Color(0xFFF7F8FA), Color(0xFFF1F5F9)],
           ),
         ),
         child: SafeArea(
@@ -276,19 +282,12 @@ class _BrandingBlock extends StatelessWidget {
           : CrossAxisAlignment.center,
       children: [
         Hero(
-          tag: 'university-logo',
-          child: Container(
+          tag: 'app-logo',
+          child: Image.asset(
+            'assets/images/logo.png',
             width: 72,
             height: 72,
-            decoration: BoxDecoration(
-              color: AppColors.primary,
-              borderRadius: BorderRadius.circular(AppRadius.lg),
-            ),
-            child: const Icon(
-              Icons.school_rounded,
-              color: Colors.white,
-              size: 36,
-            ),
+            filterQuality: FilterQuality.high,
           ),
         ),
         const SizedBox(height: AppSpacing.md),

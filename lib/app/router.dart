@@ -1,15 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_flutter/core/storage/local_storage.dart';
 import 'package:mobile_flutter/features/auth/login_screen.dart';
 import 'package:mobile_flutter/features/home/home_screen.dart';
+import 'package:mobile_flutter/features/splash/splash_screen.dart';
 
 class AppRouter {
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
+
   static const String loginRoute = '/login';
   static const String homeRoute = '/home';
+  static const String splashRoute = '/splash';
+  static bool isOnLoginRoute = false;
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     late final Widget page;
 
     switch (settings.name) {
+      case splashRoute:
+        page = SplashScreen(onComplete: _resolveStartScreen);
+        break;
       case homeRoute:
         page = const HomeScreen();
         break;
@@ -40,5 +50,13 @@ class AppRouter {
         );
       },
     );
+  }
+
+  static Future<Widget> _resolveStartScreen() async {
+    final token = await LocalStorage().getToken();
+    if (token != null && token.isNotEmpty) {
+      return const HomeScreen();
+    }
+    return const LoginScreen();
   }
 }

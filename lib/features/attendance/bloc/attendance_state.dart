@@ -2,6 +2,8 @@ part of 'attendance_bloc.dart';
 
 enum AttendanceMode { initial, student, staff }
 
+enum AttendanceToastType { success, warning, error }
+
 class AttendanceState extends Equatable {
   const AttendanceState({
     required this.mode,
@@ -24,6 +26,7 @@ class AttendanceState extends Equatable {
     required this.errorMessage,
     required this.toastMessage,
     required this.toastIsSuccess,
+    required this.toastType,
     required this.toastSequence,
     required this.currentPage,
     required this.qrSupported,
@@ -55,6 +58,7 @@ class AttendanceState extends Equatable {
       errorMessage: null,
       toastMessage: null,
       toastIsSuccess: true,
+      toastType: AttendanceToastType.success,
       toastSequence: 0,
       currentPage: 0,
       qrSupported: false,
@@ -85,6 +89,7 @@ class AttendanceState extends Equatable {
   final String? errorMessage;
   final String? toastMessage;
   final bool toastIsSuccess;
+  final AttendanceToastType toastType;
   final int toastSequence;
   final int currentPage;
   final bool qrSupported;
@@ -107,6 +112,7 @@ class AttendanceState extends Equatable {
     Map<int, bool>? alreadyMarkedMap,
     StudentAttendanceStatusData? studentData,
     Map<String, dynamic>? sessionSnapshot,
+    bool clearSessionSnapshot = false,
     bool? loadingCourses,
     bool? loadingStudents,
     bool? loadingStudentStatus,
@@ -114,6 +120,7 @@ class AttendanceState extends Equatable {
     String? errorMessage,
     String? toastMessage,
     bool? toastIsSuccess,
+    AttendanceToastType? toastType,
     int? toastSequence,
     int? currentPage,
     bool? qrSupported,
@@ -122,6 +129,14 @@ class AttendanceState extends Equatable {
     int? semesterId,
     int? teacherId,
   }) {
+    final resolvedToastType =
+        toastType ??
+        (toastIsSuccess == null
+            ? this.toastType
+            : toastIsSuccess
+            ? AttendanceToastType.success
+            : AttendanceToastType.error);
+
     return AttendanceState(
       mode: mode ?? this.mode,
       isInitialized: isInitialized ?? this.isInitialized,
@@ -135,7 +150,9 @@ class AttendanceState extends Equatable {
       presentMap: presentMap ?? this.presentMap,
       alreadyMarkedMap: alreadyMarkedMap ?? this.alreadyMarkedMap,
       studentData: studentData ?? this.studentData,
-      sessionSnapshot: sessionSnapshot ?? this.sessionSnapshot,
+      sessionSnapshot: clearSessionSnapshot
+          ? null
+          : sessionSnapshot ?? this.sessionSnapshot,
       loadingCourses: loadingCourses ?? this.loadingCourses,
       loadingStudents: loadingStudents ?? this.loadingStudents,
       loadingStudentStatus: loadingStudentStatus ?? this.loadingStudentStatus,
@@ -143,6 +160,7 @@ class AttendanceState extends Equatable {
       errorMessage: errorMessage,
       toastMessage: toastMessage ?? this.toastMessage,
       toastIsSuccess: toastIsSuccess ?? this.toastIsSuccess,
+      toastType: resolvedToastType,
       toastSequence: toastSequence ?? this.toastSequence,
       currentPage: currentPage ?? this.currentPage,
       qrSupported: qrSupported ?? this.qrSupported,
@@ -175,6 +193,7 @@ class AttendanceState extends Equatable {
     errorMessage,
     toastMessage,
     toastIsSuccess,
+    toastType,
     toastSequence,
     currentPage,
     qrSupported,

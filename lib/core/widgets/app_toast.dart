@@ -2,12 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-enum AppToastType { success, error, info }
+enum AppToastType { success, error, warning, info }
 
 class AppToast {
   static OverlayEntry? _currentEntry;
 
-static void show(
+  static void show(
     BuildContext context, {
     required String message,
     required AppToastType type,
@@ -28,7 +28,9 @@ static void show(
       entry = OverlayEntry(
         builder: (context) {
           final media = MediaQuery.of(context);
-          final maxWidth = media.size.width < 420 ? media.size.width - 24 : 380.0;
+          final maxWidth = media.size.width < 420
+              ? media.size.width - 24
+              : 380.0;
 
           return Positioned(
             top: media.padding.top + 12,
@@ -151,11 +153,7 @@ class _ToastCardState extends State<_ToastCard> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
         curve: Curves.easeOut,
-        transform: Matrix4.translationValues(
-          _dragOffset.dx,
-          _dragOffset.dy,
-          0,
-        ),
+        transform: Matrix4.translationValues(_dragOffset.dx, _dragOffset.dy, 0),
         constraints: BoxConstraints(maxWidth: widget.maxWidth),
         child: GestureDetector(
           onTapDown: (_) => _pauseAutoDismissTimer(),
@@ -168,7 +166,8 @@ class _ToastCardState extends State<_ToastCard> {
             });
           },
           onPanEnd: (_) {
-            final shouldDismiss = _dragOffset.dx.abs() > 140 || _dragOffset.dy.abs() > 120;
+            final shouldDismiss =
+                _dragOffset.dx.abs() > 140 || _dragOffset.dy.abs() > 120;
             if (shouldDismiss) {
               _dismiss();
               return;
@@ -239,6 +238,12 @@ class _ToastCardState extends State<_ToastCard> {
           backgroundColor: Color(0xFFDC2626),
           borderColor: Color(0xFFEF4444),
           icon: Icons.error,
+        );
+      case AppToastType.warning:
+        return const _ToastStyle(
+          backgroundColor: Color(0xFFD97706),
+          borderColor: Color(0xFFF59E0B),
+          icon: Icons.warning_amber_rounded,
         );
       case AppToastType.info:
         return const _ToastStyle(

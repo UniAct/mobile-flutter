@@ -173,7 +173,7 @@ class SecurityService {
       final decoded = utf8.decode(base64.decode(payload));
       final map = jsonDecode(decoded);
       if (map is Map<String, dynamic>) {
-        final subject = map['sub'] ?? map['userId'] ?? map['uid'];
+        final subject = map['sub'] ?? map['userId'] ?? map['uid'] ?? map['id'];
         return subject?.toString();
       }
     } catch (_) {}

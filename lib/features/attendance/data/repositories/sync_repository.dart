@@ -81,8 +81,9 @@ class SyncRepository {
             payloadJson: Value(
               '{"last_sync_at": "${timestamp.toIso8601String()}"}',
             ),
-            syncStatus: const Value('success'),
+            syncStatus: const Value('synced'),
             retryCount: const Value(0),
+            deviceId: const Value('local-device'),
             createdAt: Value(timestamp),
             updatedAt: Value(timestamp),
           ),
@@ -134,6 +135,7 @@ class SyncRepository {
             payloadJson: Value(jsonEncode(params)),
             syncStatus: const Value('pending'),
             priority: const Value(1), // High priority
+            deviceId: const Value('local-device'),
             createdAt: Value(now),
             updatedAt: Value(now),
           ),
@@ -146,7 +148,10 @@ class SyncRepository {
       for (final id in queueIds) {
         batch.update(
           database.syncQueues,
-          const SyncQueuesCompanion(syncStatus: Value('success')),
+          SyncQueuesCompanion(
+            syncStatus: const Value('synced'),
+            syncedAt: Value(DateTime.now()),
+          ),
           where: (tbl) => tbl.id.equals(id),
         );
       }
@@ -154,7 +159,7 @@ class SyncRepository {
   }
 
   /// Get failed items for retry with backoff
-  Future<List<SyncQueueModel>> getFailedItems({int maxRetries = 5}) async {
+  Future<List<SyncQueueModel>> getFailedItems({int maxRetries = 3}) async {
     final records =
         await (database.select(database.syncQueues)
               ..where(

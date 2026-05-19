@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 class UserModel {
   UserModel({
     required this.userId,
@@ -23,6 +25,7 @@ class UserModel {
   }
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
+    debugPrint('[UserModel] Token payload keys: ${json.keys.join(', ')}');
     final rolesRaw = json['roles'];
     final parsedRoles = rolesRaw is List
         ? rolesRaw.map((e) => e.toString()).toList()
@@ -41,7 +44,11 @@ class UserModel {
       universityName: (json['university_name'] ?? json['university'] ?? '')
           .toString(),
       roles: parsedRoles,
-      staffId: _toInt((json['staff'] as Map<String, dynamic>?)?['id']),
+      staffId: _toInt(
+        (json['staff'] as Map<String, dynamic>?)?['id'] ??
+            json['staff_id'] ??
+            json['staffId'],
+      ),
     );
   }
 

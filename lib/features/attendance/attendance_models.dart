@@ -81,11 +81,13 @@ class EnrolledStudent {
     required this.studentId,
     required this.fullName,
     required this.email,
+    required this.universityStudentId,
   });
 
   final int studentId;
   final String fullName;
   final String email;
+  final String universityStudentId;
 
   factory EnrolledStudent.fromJson(Map<String, dynamic> json) {
     final student =
@@ -102,12 +104,20 @@ class EnrolledStudent {
       studentId: _toInt(json['studentId']),
       fullName: fullName.isNotEmpty ? fullName : 'Student ${json['studentId']}',
       email: (user['email'] ?? json['email'] ?? '').toString(),
+      universityStudentId:
+          (student['universityStudentId'] ??
+                  student['university_student_id'] ??
+                  json['universityStudentId'] ??
+                  json['university_student_id'] ??
+                  '')
+              .toString(),
     );
   }
 
   Map<String, dynamic> toJson() => {
     'studentId': studentId,
     'student': {
+      'universityStudentId': universityStudentId,
       'user': {'firstName': fullName, 'lastName': '', 'email': email},
     },
   };

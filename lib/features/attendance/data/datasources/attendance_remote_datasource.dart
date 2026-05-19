@@ -27,32 +27,11 @@ class AttendanceRemoteDataSource {
     required DateTime? since,
     int limit = 200,
   }) async {
-    try {
-      final queryParams = <String, String>{
-        'entity': entityType,
-        'limit': limit.toString(),
-        if (since != null) 'since': since.toIso8601String(),
-      };
-
-      final response = await apiClient.get(
-        '/sync/delta?${Uri(queryParameters: queryParams).query}',
-        requiresAuth: true,
-      );
-
-      final data = response is Map<String, dynamic> ? response['data'] : null;
-      if (data is Map<String, dynamic>) {
-        final entityData = data[entityType];
-        if (entityData is List) {
-          return {
-            entityType: entityData.whereType<Map<String, dynamic>>().toList(),
-          };
-        }
-      }
-
-      return {entityType: []};
-    } on AppException {
-      rethrow;
-    }
+    debugPrint(
+      '[RemoteDataSource] Delta sync is not exposed by the backend contract; '
+      'skipping $entityType pull.',
+    );
+    return {entityType: []};
   }
 
   // ─────────────────────────────────────────────
@@ -61,15 +40,9 @@ class AttendanceRemoteDataSource {
 
   /// Batch create/update attendance records (for delta sync)
   Future<void> syncAttendanceBatch(List<Map<String, dynamic>> records) async {
-    try {
-      await apiClient.post(
-        '/sync/attendance/batch',
-        requiresAuth: true,
-        body: {'records': records},
-      );
-    } on AppException {
-      rethrow;
-    }
+    throw AppException(
+      'Bulk attendance sync is not available in the current backend contract.',
+    );
   }
 
   /// Batch sync students (for initial/full sync)
@@ -77,17 +50,9 @@ class AttendanceRemoteDataSource {
     required List<Map<String, dynamic>> students,
     required DateTime lastSync,
   }) async {
-    try {
-      final response = await apiClient.post(
-        '/sync/students/batch',
-        requiresAuth: true,
-        body: {'students': students, 'lastSync': lastSync.toIso8601String()},
-      );
-
-      return response is Map<String, dynamic> ? response : <String, dynamic>{};
-    } on AppException {
-      rethrow;
-    }
+    throw AppException(
+      'Bulk student sync is not available in the current backend contract.',
+    );
   }
 
   // ─────────────────────────────────────────────
@@ -101,32 +66,11 @@ class AttendanceRemoteDataSource {
     required List<int> entityIds,
     required Map<int, DateTime> localVersions,
   }) async {
-    try {
-      final idsCsv = entityIds.join(',');
-      final response = await apiClient.get(
-        '/sync/check-conflicts?type=$entityType&ids=$idsCsv',
-        requiresAuth: true,
-      );
-
-      final data = response is Map<String, dynamic> ? response['data'] : null;
-      if (data is Map<String, dynamic>) {
-        final conflicts = <String, Map<String, DateTime>>{};
-        data.forEach((key, value) {
-          if (value is Map<String, dynamic> && value['serverVersion'] != null) {
-            conflicts[key] = {
-              'server': DateTime.parse(value['serverVersion'].toString()),
-              'client':
-                  localVersions[entityIds[int.parse(key)]] ?? DateTime.now(),
-            };
-          }
-        });
-        return conflicts;
-      }
-
-      return <String, Map<String, DateTime>>{};
-    } on AppException {
-      rethrow;
-    }
+    debugPrint(
+      '[RemoteDataSource] Conflict check is not exposed by the backend '
+      'contract; using local FIFO conflict handling for $entityType.',
+    );
+    return <String, Map<String, DateTime>>{};
   }
 
   // ─────────────────────────────────────────────
@@ -217,18 +161,15 @@ class AttendanceRemoteDataSource {
     required int sessionId,
   }) async {
     try {
-      final payload = {
-        'studentId': studentId,
-        'attendanceDate': attendanceDate.toIso8601String(),
-        'status': status,
-        'courseId': courseId,
-        'sessionId': sessionId,
-      };
-
       await apiClient.post(
-        '/attendance/sync',
+        '/attendance/session/$sessionId/attendances',
         requiresAuth: true,
-        body: payload,
+        body: <String, dynamic>{
+          'attendanceSessionId': sessionId,
+          'records': [
+            {'studentId': studentId, 'status': status.toLowerCase()},
+          ],
+        },
       );
     } on AppException {
       rethrow;
@@ -256,25 +197,17 @@ class AttendanceRemoteDataSource {
           break;
 
         case 'mark_attendance':
-          await apiClient.post(
-            '/attendance/records',
-            requiresAuth: true,
-            body: payload,
-          );
+          await _submitSingleAttendanceOnline(payload as Map<String, dynamic>);
           break;
 
         case 'update_attendance':
-          await apiClient.put(
-            '/attendance/records/${item.entityId}',
-            requiresAuth: true,
-            body: payload,
-          );
+          await _submitSingleAttendanceOnline(payload as Map<String, dynamic>);
           break;
 
         case 'delete_attendance':
-          await apiClient.delete(
-            '/attendance/records/${item.entityId}',
-            requiresAuth: true,
+          debugPrint(
+            '[RemoteDataSource] Backend has no attendance delete endpoint; '
+            'leaving item ${item.id} for a future contract.',
           );
           break;
 
@@ -288,6 +221,35 @@ class AttendanceRemoteDataSource {
     } on AppException {
       rethrow;
     }
+  }
+
+  Future<void> _submitSingleAttendanceOnline(
+    Map<String, dynamic> payload,
+  ) async {
+    final sessionId = _toInt(
+      payload['sessionId'] ?? payload['attendanceSessionId'],
+    );
+    final studentId = _toInt(payload['studentId']);
+    if (sessionId <= 0 || studentId <= 0) {
+      throw AppException(
+        'Cannot sync attendance without session and student ids.',
+      );
+    }
+
+    await apiClient.post(
+      '/attendance/session/$sessionId/attendances',
+      requiresAuth: true,
+      body: <String, dynamic>{
+        'attendanceSessionId': sessionId,
+        'records': [
+          {
+            'studentId': studentId,
+            'status': (payload['status'] ?? 'absent').toString().toLowerCase(),
+            if (payload['notes'] != null) 'notes': payload['notes'],
+          },
+        ],
+      },
+    );
   }
 
   Future<void> _submitManualBatchOnline(Map<String, dynamic> payload) async {
@@ -336,6 +298,7 @@ class AttendanceRemoteDataSource {
     final startTime = (payload['startTime'] ?? '').toString();
     final endTime = (payload['endTime'] ?? '').toString();
     final attendanceMode = (payload['attendanceMode'] ?? 'QRCode').toString();
+    final studentId = _toInt(payload['studentId']);
 
     final sessionId = await _ensureSession(
       slotId: slotId,
@@ -350,10 +313,32 @@ class AttendanceRemoteDataSource {
       '/attendance/session/$sessionId/scan',
       requiresAuth: true,
       body: <String, dynamic>{
-        'qrPayload': (payload['qrPayload'] ?? '').toString(),
+        'qrPayload': _normalizedQrPayload(
+          payload['qrPayload'],
+          studentId: studentId,
+        ),
         'status': (payload['status'] ?? 'present').toString().toLowerCase(),
       },
     );
+  }
+
+  String _normalizedQrPayload(dynamic rawPayload, {required int studentId}) {
+    final raw = rawPayload?.toString().trim() ?? '';
+    if (raw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map<String, dynamic> &&
+            _toInt(decoded['studentId']) > 0) {
+          return raw;
+        }
+      } catch (_) {}
+    }
+
+    if (studentId <= 0) {
+      throw AppException('Cannot sync QR attendance without a student id.');
+    }
+
+    return jsonEncode(<String, dynamic>{'studentId': studentId});
   }
 
   Future<int> _ensureSession({

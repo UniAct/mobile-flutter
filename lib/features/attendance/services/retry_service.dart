@@ -1,7 +1,7 @@
 import 'dart:math';
 
 /// Retry service with exponential backoff
-/// 
+///
 /// Retry schedule:
 /// - Attempt 1: Immediate
 /// - Attempt 2: After 1 second
@@ -27,8 +27,8 @@ class RetryService {
     }
 
     // Exponential backoff: 1s, 2s, 4s, 8s, etc.
-    final exponentialDelay = initialDelaySeconds *
-        pow(backoffMultiplier, retryCount).toInt();
+    final exponentialDelay =
+        initialDelaySeconds * pow(backoffMultiplier, retryCount).toInt();
 
     // Cap at max delay
     final cappedDelay = min(exponentialDelay, maxDelaySeconds);

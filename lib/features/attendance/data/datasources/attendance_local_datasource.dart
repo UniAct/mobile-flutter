@@ -155,7 +155,7 @@ class AttendanceLocalDataSource {
       ..where(
         (tbl) =>
             (tbl.syncStatus.equals('pending') |
-                tbl.syncStatus.equals('failed')) &
+                tbl.syncStatus.equals('syncing')) &
             tbl.actionType.isNotIn(_internalSyncActionTypes),
       );
     return query.watch().map((rows) => rows.length);
@@ -329,19 +329,30 @@ class AttendanceLocalDataSource {
     required int entityId,
     required Map<String, dynamic> payload,
   }) async {
-    await database
-        .into(database.syncQueues)
-        .insert(
-          SyncQueuesCompanion(
-            actionType: Value(actionType),
-            entityType: Value(entityType),
-            entityId: Value(entityId),
-            payloadJson: Value(jsonEncode(payload)),
-            syncStatus: const Value('pending'),
-            deviceId: const Value('local-device'),
-          ),
-          mode: InsertMode.insertOrReplace,
-        );
+    await database.transaction(() async {
+      await (database.delete(database.syncQueues)..where(
+            (tbl) =>
+                tbl.entityType.equals(entityType) &
+                tbl.entityId.equals(entityId) &
+                (tbl.syncStatus.equals('pending') |
+                    tbl.syncStatus.equals('syncing')),
+          ))
+          .go();
+
+      await database
+          .into(database.syncQueues)
+          .insert(
+            SyncQueuesCompanion(
+              actionType: Value(actionType),
+              entityType: Value(entityType),
+              entityId: Value(entityId),
+              payloadJson: Value(jsonEncode(payload)),
+              syncStatus: const Value('pending'),
+              deviceId: const Value('local-device'),
+            ),
+            mode: InsertMode.insertOrReplace,
+          );
+    });
   }
 
   Future<List<SyncQueueModel>> getPendingSyncItems() async {
@@ -349,7 +360,8 @@ class AttendanceLocalDataSource {
         await (database.select(database.syncQueues)
               ..where(
                 (tbl) =>
-                    tbl.syncStatus.equals('pending') &
+                    (tbl.syncStatus.equals('pending') |
+                        tbl.syncStatus.equals('syncing')) &
                     tbl.actionType.isNotIn(_internalSyncActionTypes),
               )
               ..orderBy([
@@ -371,7 +383,7 @@ class AttendanceLocalDataSource {
         await (database.select(database.syncQueues)..where(
               (tbl) =>
                   (tbl.syncStatus.equals('pending') |
-                      tbl.syncStatus.equals('failed')) &
+                      tbl.syncStatus.equals('syncing')) &
                   tbl.actionType.isNotIn(_internalSyncActionTypes),
             ))
             .get();
@@ -379,20 +391,65 @@ class AttendanceLocalDataSource {
   }
 
   Future<void> markSyncItemAsSyncing(int queueId) async {
-    await (database.update(database.syncQueues)
-          ..where((tbl) => tbl.id.equals(queueId)))
-        .write(const SyncQueuesCompanion(syncStatus: Value('syncing')));
+    await database.transaction(() async {
+      final record = await (database.select(
+        database.syncQueues,
+      )..where((tbl) => tbl.id.equals(queueId))).getSingleOrNull();
+      if (record == null) {
+        return;
+      }
+
+      await (database.delete(database.syncQueues)..where(
+            (tbl) =>
+                tbl.id.isNotValue(queueId) &
+                tbl.entityType.equals(record.entityType) &
+                tbl.entityId.equals(record.entityId) &
+                tbl.syncStatus.equals('syncing'),
+          ))
+          .go();
+
+      await (database.update(
+        database.syncQueues,
+      )..where((tbl) => tbl.id.equals(queueId))).write(
+        SyncQueuesCompanion(
+          syncStatus: const Value('syncing'),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+    });
   }
 
   Future<void> markSyncItemAsSuccess(int queueId) async {
-    await (database.update(
-      database.syncQueues,
-    )..where((tbl) => tbl.id.equals(queueId))).write(
-      SyncQueuesCompanion(
-        syncStatus: const Value('success'),
-        lastRetryAt: Value(DateTime.now()),
-      ),
-    );
+    await database.transaction(() async {
+      final record = await (database.select(
+        database.syncQueues,
+      )..where((tbl) => tbl.id.equals(queueId))).getSingleOrNull();
+      if (record == null) {
+        return;
+      }
+
+      await (database.delete(database.syncQueues)..where(
+            (tbl) =>
+                tbl.id.isNotValue(queueId) &
+                tbl.entityType.equals(record.entityType) &
+                tbl.entityId.equals(record.entityId) &
+                (tbl.syncStatus.equals('success') |
+                    tbl.syncStatus.equals('synced')),
+          ))
+          .go();
+
+      final now = DateTime.now();
+      await (database.update(
+        database.syncQueues,
+      )..where((tbl) => tbl.id.equals(queueId))).write(
+        SyncQueuesCompanion(
+          syncStatus: const Value('synced'),
+          lastRetryAt: Value(now),
+          syncedAt: Value(now),
+          updatedAt: Value(now),
+        ),
+      );
+    });
   }
 
   Future<void> markSyncItemAsFailed(int queueId, String error) async {
@@ -410,24 +467,38 @@ class AttendanceLocalDataSource {
       seconds: pow(2.0, newRetryCount).toInt().clamp(1, 60),
     );
 
-    await (database.update(
-      database.syncQueues,
-    )..where((tbl) => tbl.id.equals(queueId))).write(
-      SyncQueuesCompanion(
-        syncStatus: const Value('failed'),
-        retryCount: Value(newRetryCount),
-        lastError: Value(error),
-        lastRetryAt: Value(now),
-        nextRetryAt: Value(now.add(retryDelay)),
-        updatedAt: Value(now),
-      ),
-    );
+    await database.transaction(() async {
+      await (database.delete(database.syncQueues)..where(
+            (tbl) =>
+                tbl.id.isNotValue(queueId) &
+                tbl.entityType.equals(record.entityType) &
+                tbl.entityId.equals(record.entityId) &
+                tbl.syncStatus.equals('failed'),
+          ))
+          .go();
+
+      await (database.update(
+        database.syncQueues,
+      )..where((tbl) => tbl.id.equals(queueId))).write(
+        SyncQueuesCompanion(
+          syncStatus: const Value('failed'),
+          retryCount: Value(newRetryCount),
+          lastError: Value(error),
+          lastRetryAt: Value(now),
+          nextRetryAt: Value(now.add(retryDelay)),
+          updatedAt: Value(now),
+        ),
+      );
+    });
   }
 
   Future<void> clearSyncedItems() async {
-    await (database.delete(
-      database.syncQueues,
-    )..where((tbl) => tbl.syncStatus.equals('success'))).go();
+    await (database.delete(database.syncQueues)..where(
+          (tbl) =>
+              tbl.syncStatus.equals('success') |
+              tbl.syncStatus.equals('synced'),
+        ))
+        .go();
   }
 
   Future<void> deleteSyncQueueItem(int queueId) async {

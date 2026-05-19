@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:mobile_flutter/core/security/security_service.dart';
 
 class LocalStorage {
   static const String _tokenKey = 'token';
@@ -6,23 +7,37 @@ class LocalStorage {
   static const String _dashboardCacheKey = 'dashboard_cache_json';
   static const String _dashboardCacheTimestampKey = 'dashboard_cache_ts';
 
+  final SecurityService _securityService = SecurityService();
+
   Future<SharedPreferences> get _prefs async => SharedPreferences.getInstance();
 
   Future<void> saveToken(String token) async {
+    await _securityService.saveAuthToken(token);
     final prefs = await _prefs;
-    await prefs.setString(_tokenKey, token);
+    await prefs.remove(_tokenKey);
   }
 
   Future<String?> getToken() async {
     try {
+      final secureToken = await _securityService.getAuthToken();
+      if (secureToken != null && secureToken.isNotEmpty) {
+        return secureToken;
+      }
+
       final prefs = await _prefs;
-      return prefs.getString(_tokenKey);
+      final legacyToken = prefs.getString(_tokenKey);
+      if (legacyToken != null && legacyToken.isNotEmpty) {
+        await _securityService.saveAuthToken(legacyToken);
+        await prefs.remove(_tokenKey);
+      }
+      return legacyToken;
     } catch (_) {
       return null;
     }
   }
 
   Future<void> clearToken() async {
+    await _securityService.clearAuthToken();
     final prefs = await _prefs;
     await prefs.remove(_tokenKey);
   }

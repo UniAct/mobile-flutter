@@ -36,7 +36,10 @@ class AttendanceCourseSelected extends AttendanceEvent {
 }
 
 class AttendanceMarkToggled extends AttendanceEvent {
-  const AttendanceMarkToggled({required this.studentId, required this.isPresent});
+  const AttendanceMarkToggled({
+    required this.studentId,
+    required this.isPresent,
+  });
 
   final int studentId;
   final bool isPresent;

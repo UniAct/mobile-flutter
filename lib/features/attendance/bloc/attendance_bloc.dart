@@ -42,6 +42,7 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
   }
 
   final AttendanceDependencies _dependencies;
+  final Set<int> _processingQrStudentIds = <int>{};
   AttendanceRepository get _attendanceRepository =>
       _dependencies.attendanceRepository;
   SyncRepository get _syncRepository => _dependencies.syncRepository;
@@ -75,6 +76,18 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
     AttendanceStarted event,
     Emitter<AttendanceState> emit,
   ) async {
+    final rawTeacherId = event.user.staffId;
+    if (!event.dashboard.isStudent &&
+        (rawTeacherId == null || rawTeacherId <= 0)) {
+      debugPrint(
+        '[AttendanceBloc] WARNING: staffId is null/zero. Courses may not '
+        'filter correctly. userId=${event.user.userId}',
+      );
+    }
+    final resolvedTeacherId = rawTeacherId != null && rawTeacherId > 0
+        ? rawTeacherId
+        : _toInt(event.user.userId);
+
     emit(
       state.copyWith(
         mode: event.dashboard.isStudent
@@ -83,9 +96,7 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
         userName: event.user.name,
         userId: event.user.userId,
         semesterId: event.dashboard.semesterId,
-        teacherId: event.dashboard.isStudent
-            ? 0
-            : (event.user.staffId ?? _toInt(event.user.userId)),
+        teacherId: event.dashboard.isStudent ? 0 : resolvedTeacherId,
         isInitialized: true,
         selectedDate: DateTime.now(),
         qrSupported: _isQrSupported,
@@ -139,7 +150,18 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
     AttendanceDateChanged event,
     Emitter<AttendanceState> emit,
   ) async {
-    final nextState = state.copyWith(selectedDate: event.date);
+    final resetPresentMap = <int, bool>{
+      for (final student in state.students) student.studentId: false,
+    };
+    final resetMarkedMap = <int, bool>{
+      for (final student in state.students) student.studentId: false,
+    };
+    final nextState = state.copyWith(
+      selectedDate: event.date,
+      presentMap: resetPresentMap,
+      alreadyMarkedMap: resetMarkedMap,
+      clearSessionSnapshot: true,
+    );
     emit(nextState);
 
     if (state.mode == AttendanceMode.staff && state.selectedCourse != null) {
@@ -164,6 +186,10 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
     emit(
       state.copyWith(
         selectedCourse: selectedCourse,
+        students: const <EnrolledStudent>[],
+        presentMap: const <int, bool>{},
+        alreadyMarkedMap: const <int, bool>{},
+        clearSessionSnapshot: true,
         currentPage: 0,
         loadingStudents: true,
       ),
@@ -238,6 +264,7 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
       emit(
         state.copyWith(
           isSaving: false,
+          syncState: state.isOnline ? state.syncState : SyncStatus.offline,
           toastMessage: 'Attendance saved successfully.',
           toastIsSuccess: true,
           toastSequence: state.toastSequence + 1,
@@ -276,50 +303,105 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
       return;
     }
 
+    final qrData = _decodeQrPayload(event.qrPayload);
+    final studentId = _resolveQrStudentId(qrData, event.qrPayload);
+
+    var didMarkProcessing = false;
+
     try {
-      // Step 1: Decode QR payload
-      final qrData = _decodeQrPayload(event.qrPayload);
-      var studentId = _toInt(qrData['studentId']);
-
-      // Step 2: If studentId not in payload, try raw payload as ID
       if (studentId <= 0) {
-        studentId = _toInt(event.qrPayload);
-      }
-
-      if (studentId <= 0) {
-        emit(state.copyWith(errorMessage: 'Invalid QR code data.'));
-        return;
-      }
-
-      // Step 3: OPTIMISTIC LOCAL VALIDATION (No API call)
-      // Check if student exists in local DB BY QR (fast, indexed lookup)
-      // Even if not in current course roster, we allow marking based on QR validity
-      LocalStudent? student;
-      try {
-        // First try QR payload lookup (fastest, most reliable)
-        student = await _localStudentService.findStudentByQr(event.qrPayload);
-
-        // Fallback: look up by student ID if QR not in cache yet
-        student ??= await _localStudentService.findStudentById(studentId);
-      } catch (e) {
-        debugPrint('[AttendanceBloc] Local student lookup failed: $e');
-      }
-
-      // Step 4: Mark attendance locally (instant UI update via streams)
-      // Even if student is unknown, we still record with generic name (recoverable)
-      final studentName = student?.fullName ?? 'Unknown Student';
-      final resolvedStudentId = student?.id ?? studentId;
-
-      final assignedToClass =
-          state.students.isEmpty ||
-          state.students.any((item) => item.studentId == resolvedStudentId);
-      if (!assignedToClass) {
-        const message = 'Student not assigned to this class.';
+        const message = 'Invalid QR code data.';
         emit(
           state.copyWith(
             errorMessage: message,
             toastMessage: message,
             toastIsSuccess: false,
+            toastSequence: state.toastSequence + 1,
+          ),
+        );
+        return;
+      }
+
+      LocalStudent? student;
+      try {
+        student = await _localStudentService.findStudentByQr(event.qrPayload);
+        student ??= await _localStudentService.findStudentById(studentId);
+      } catch (e) {
+        debugPrint('[AttendanceBloc] Local student lookup failed: $e');
+      }
+
+      final localStudentId = student?.id ?? studentId;
+      final rosterStudent =
+          _findRosterStudent(studentId) ??
+          (localStudentId != studentId
+              ? _findRosterStudent(localStudentId)
+              : null);
+      final displayName =
+          rosterStudent?.fullName ??
+          student?.fullName ??
+          _resolveQrStudentName(qrData);
+      final universityStudentId = _resolveUniversityStudentId(
+        qrData,
+        student,
+        rosterStudent,
+      );
+      final resolvedStudentLabel = _formatStudentLabel(
+        name: displayName,
+        universityStudentId: universityStudentId,
+      );
+
+      if (_processingQrStudentIds.contains(studentId)) {
+        debugPrint(
+          '[AttendanceBloc] Ignoring duplicate QR frame while processing: '
+          '$studentId ($resolvedStudentLabel)',
+        );
+        return;
+      }
+
+      _processingQrStudentIds.add(studentId);
+      didMarkProcessing = true;
+
+      final resolvedStudentId = rosterStudent?.studentId ?? localStudentId;
+      final displayLabel = _formatStudentLabel(
+        name:
+            rosterStudent?.fullName ??
+            student?.fullName ??
+            _resolveQrStudentName(qrData),
+        universityStudentId: universityStudentId,
+      );
+
+      final assignedToClass = rosterStudent != null;
+      if (!assignedToClass) {
+        final message = '$displayLabel is not enrolled in this class.';
+        emit(
+          state.copyWith(
+            errorMessage: message,
+            toastMessage: message,
+            toastIsSuccess: false,
+            toastSequence: state.toastSequence + 1,
+          ),
+        );
+        return;
+      }
+
+      var sessionSnapshot = state.sessionSnapshot;
+      if (sessionSnapshot == null && state.isOnline) {
+        sessionSnapshot = await _attendanceRepository
+            .fetchAndCacheSessionSnapshot(
+              scheduleSlotId: selectedCourse.scheduleSlotId,
+              attendanceDate: state.selectedDate,
+            );
+      }
+
+      if (_isAlreadyMarked(
+        resolvedStudentId,
+        sessionSnapshot: sessionSnapshot,
+      )) {
+        emit(
+          state.copyWith(
+            errorMessage: '$displayLabel attendance already taken.',
+            toastMessage: '$displayLabel attendance already taken.',
+            toastType: AttendanceToastType.warning,
             toastSequence: state.toastSequence + 1,
           ),
         );
@@ -337,6 +419,7 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
       await _attendanceRepository.submitQrScanLocally(
         scheduleSlotId: selectedCourse.scheduleSlotId,
         facultyMemberId: state.teacherId,
+        studentId: resolvedStudentId,
         attendanceDate: state.selectedDate,
         startTime: selectedCourse.startTime,
         endTime: selectedCourse.endTime,
@@ -348,13 +431,22 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
         unawaited(_syncEngine.syncNow());
       }
 
+      final updatedPresentMap = Map<int, bool>.from(state.presentMap)
+        ..[resolvedStudentId] = true;
+      final updatedAlreadyMarkedMap = Map<int, bool>.from(
+        state.alreadyMarkedMap,
+      )..[resolvedStudentId] = true;
+
       debugPrint(
-        '[AttendanceBloc] QR attendance recorded: Student $resolvedStudentId ($studentName)',
+        '[AttendanceBloc] QR attendance recorded: Student $resolvedStudentId ($displayLabel)',
       );
       emit(
         state.copyWith(
           errorMessage: null,
-          toastMessage: '$studentName marked attendance successfully.',
+          presentMap: updatedPresentMap,
+          alreadyMarkedMap: updatedAlreadyMarkedMap,
+          syncState: state.isOnline ? state.syncState : SyncStatus.offline,
+          toastMessage: '$displayLabel attendance saved.',
           toastIsSuccess: true,
           toastSequence: state.toastSequence + 1,
         ),
@@ -369,6 +461,10 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
           toastSequence: state.toastSequence + 1,
         ),
       );
+    } finally {
+      if (didMarkProcessing) {
+        _processingQrStudentIds.remove(studentId);
+      }
     }
   }
 
@@ -475,6 +571,7 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
     emit(
       state.copyWith(
         sessionSnapshot: event.session,
+        clearSessionSnapshot: event.session == null,
         loadingStudents: false,
         alreadyMarkedMap: updatedAlready,
         presentMap: updatedPresent,
@@ -739,6 +836,139 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
       }
     } catch (_) {}
     return <String, dynamic>{};
+  }
+
+  int _resolveQrStudentId(Map<String, dynamic> qrData, String qrPayload) {
+    final candidates = <dynamic>[
+      qrData['studentId'],
+      qrData['student_id'],
+      qrData['id'],
+    ];
+
+    for (final candidate in candidates) {
+      final value = _toInt(candidate);
+      if (value > 0) {
+        return value;
+      }
+    }
+
+    final nestedStudent = qrData['student'];
+    if (nestedStudent is Map<String, dynamic>) {
+      final nestedCandidates = <dynamic>[
+        nestedStudent['studentId'],
+        nestedStudent['student_id'],
+        nestedStudent['id'],
+        nestedStudent['userId'],
+      ];
+
+      for (final candidate in nestedCandidates) {
+        final value = _toInt(candidate);
+        if (value > 0) {
+          return value;
+        }
+      }
+    }
+
+    return _toInt(qrPayload);
+  }
+
+  EnrolledStudent? _findRosterStudent(int studentId) {
+    for (final student in state.students) {
+      if (student.studentId == studentId) {
+        return student;
+      }
+    }
+    return null;
+  }
+
+  String? _resolveUniversityStudentId(
+    Map<String, dynamic> qrData,
+    LocalStudent? student,
+    EnrolledStudent? rosterStudent,
+  ) {
+    final candidates = <Object?>[
+      rosterStudent?.universityStudentId,
+      student?.universityStudentId,
+      qrData['universityStudentId'],
+      qrData['university_student_id'],
+      qrData['universityId'],
+      qrData['university_id'],
+      qrData['student'] is Map<String, dynamic>
+          ? (qrData['student'] as Map<String, dynamic>)['universityStudentId']
+          : null,
+      qrData['student'] is Map<String, dynamic>
+          ? (qrData['student'] as Map<String, dynamic>)['university_student_id']
+          : null,
+    ];
+
+    for (final candidate in candidates) {
+      final value = candidate?.toString().trim();
+      if (value != null && value.isNotEmpty) {
+        return value;
+      }
+    }
+
+    return null;
+  }
+
+  String? _resolveQrStudentName(Map<String, dynamic> qrData) {
+    final nestedStudent = qrData['student'];
+    final nestedUser = nestedStudent is Map<String, dynamic>
+        ? nestedStudent['user']
+        : null;
+    final candidates = <Object?>[
+      qrData['fullName'],
+      qrData['full_name'],
+      qrData['name'],
+      nestedStudent is Map<String, dynamic> ? nestedStudent['fullName'] : null,
+      nestedStudent is Map<String, dynamic> ? nestedStudent['name'] : null,
+      nestedUser is Map<String, dynamic>
+          ? '${nestedUser['firstName'] ?? ''} ${nestedUser['lastName'] ?? ''}'
+          : null,
+    ];
+
+    for (final candidate in candidates) {
+      final value = candidate?.toString().trim();
+      if (value != null && value.isNotEmpty) {
+        return value;
+      }
+    }
+
+    return null;
+  }
+
+  bool _isAlreadyMarked(
+    int studentId, {
+    Map<String, dynamic>? sessionSnapshot,
+  }) {
+    if (state.alreadyMarkedMap[studentId] == true) {
+      return true;
+    }
+
+    final effectiveSnapshot = sessionSnapshot ?? state.sessionSnapshot;
+    final attendance =
+        (effectiveSnapshot?['attendance'] as List<dynamic>? ??
+                const <dynamic>[])
+            .whereType<Map<String, dynamic>>();
+    return attendance.any((item) => _toInt(item['studentId']) == studentId);
+  }
+
+  String _formatStudentLabel({
+    required String? name,
+    String? universityStudentId,
+  }) {
+    final cleanedName = name?.trim();
+    final cleanedUniversityId = universityStudentId?.trim();
+
+    final namePart = (cleanedName != null && cleanedName.isNotEmpty)
+        ? cleanedName
+        : 'Student';
+    final uniPart =
+        (cleanedUniversityId != null && cleanedUniversityId.isNotEmpty)
+        ? cleanedUniversityId
+        : 'unknown';
+
+    return '$namePart - $uniPart';
   }
 
   int _toInt(dynamic value) {

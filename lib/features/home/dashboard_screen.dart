@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:mobile_flutter/core/theme/app_theme.dart';
-import 'package:mobile_flutter/core/widgets/app_card.dart';
 import 'package:mobile_flutter/features/auth/user_model.dart';
 import 'package:mobile_flutter/features/home/dashboard_models.dart';
 
@@ -24,190 +24,296 @@ class DashboardScreen extends StatelessWidget {
       return const Center(child: CircularProgressIndicator());
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isCompact = constraints.maxWidth < 420;
+    final currentUser = user!;
+    final currentDashboard = dashboard!;
 
-        return RefreshIndicator(
-          onRefresh: onRefresh,
-          child: ListView(
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      color: AppColors.primary,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide = constraints.maxWidth >= 900;
+          const horizontalPadding = AppSpacing.md;
+
+          return CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: EdgeInsets.all(isCompact ? AppSpacing.sm : AppSpacing.md),
-            children: [
-              _HeaderCard(
-                user: user!,
-                dashboard: dashboard!,
-                compact: isCompact,
+            slivers: [
+              SliverToBoxAdapter(
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1120),
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        horizontalPadding,
+                        isWide ? AppSpacing.lg : AppSpacing.md,
+                        horizontalPadding,
+                        0,
+                      ),
+                      child: isWide
+                          ? Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  flex: 5,
+                                  child: Column(
+                                    children: [
+                                      _HeroGreeting(
+                                        user: currentUser,
+                                        dashboard: currentDashboard,
+                                      ),
+                                      const SizedBox(height: AppSpacing.md),
+                                      _StatsRow(dashboard: currentDashboard),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: AppSpacing.lg),
+                                Expanded(
+                                  flex: 6,
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(
+                                      top: AppSpacing.md,
+                                    ),
+                                    child: _ScheduleSection(
+                                      dashboard: currentDashboard,
+                                      onOpenAttendance: onOpenAttendance,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Column(
+                              children: [
+                                _HeroGreeting(
+                                  user: currentUser,
+                                  dashboard: currentDashboard,
+                                ),
+                                const SizedBox(height: AppSpacing.md),
+                                _StatsRow(dashboard: currentDashboard),
+                                const SizedBox(height: AppSpacing.md),
+                                _ScheduleSection(
+                                  dashboard: currentDashboard,
+                                  onOpenAttendance: onOpenAttendance,
+                                ),
+                              ],
+                            ),
+                    ),
+                  ),
+                ),
               ),
-              SizedBox(height: isCompact ? AppSpacing.sm : AppSpacing.md),
-              _StatsGrid(dashboard: dashboard!),
-              SizedBox(height: isCompact ? AppSpacing.sm : AppSpacing.md),
-              _TodayScheduleCard(
-                dashboard: dashboard!,
-                onOpenAttendance: onOpenAttendance,
-                compact: isCompact,
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: MediaQuery.of(context).viewPadding.bottom + 24,
+                ),
               ),
             ],
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }
 
-class _HeaderCard extends StatelessWidget {
-  const _HeaderCard({
-    required this.user,
-    required this.dashboard,
-    required this.compact,
-  });
+class _HeroGreeting extends StatelessWidget {
+  const _HeroGreeting({required this.user, required this.dashboard});
 
   final UserModel user;
   final DashboardData dashboard;
-  final bool compact;
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    final now = DateTime.now();
+    final dateStr = DateFormat('EEEE, MMMM d').format(now);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 360;
+        final logoSize = compact ? 46.0 : 58.0;
+
+        return Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(compact ? AppSpacing.md : AppSpacing.lg),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.xl),
+            gradient: const LinearGradient(
+              colors: [Color(0xFF0F766E), Color(0xFF0D9488)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.14),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Row(
             children: [
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Welcome, ${user.name}',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      _greeting(now.hour),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.white70,
                         fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      user.name,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: compact ? 18 : null,
+                        height: 1.2,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      dashboard.dayOfWeek,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.textMuted,
+                    if (user.email.isNotEmpty) ...[
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        user.email,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.82),
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
+                    ],
+                    const SizedBox(height: AppSpacing.sm),
+                    Wrap(
+                      spacing: AppSpacing.sm,
+                      runSpacing: AppSpacing.sm,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(AppRadius.xl),
+                          ),
+                          child: Text(
+                            user.primaryRole,
+                            style: Theme.of(context).textTheme.labelMedium
+                                ?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                        ),
+                        Text(
+                          dateStr,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: Colors.white70),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
-              CircleAvatar(
-                backgroundColor: AppColors.accent,
-                radius: 20,
-                child: Text(
-                  user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.bold,
+              SizedBox(width: compact ? AppSpacing.sm : AppSpacing.md),
+              Hero(
+                tag: 'app-logo',
+                child: Container(
+                  width: logoSize,
+                  height: logoSize,
+                  padding: const EdgeInsets.all(AppSpacing.sm),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.18),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Image.asset(
+                    'assets/images/logo.png',
+                    filterQuality: FilterQuality.high,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppColors.accent.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(AppRadius.sm),
-            ),
-            child: Text(
-              dashboard.isStudent
-                  ? 'Your schedule and academic progress'
-                  : 'Today\'s teaching plan and attendance',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
+  }
+
+  String _greeting(int hour) {
+    if (hour < 12) {
+      return 'Good morning';
+    }
+    if (hour < 17) {
+      return 'Good afternoon';
+    }
+    return 'Good evening';
   }
 }
 
-class _StatsGrid extends StatelessWidget {
-  const _StatsGrid({required this.dashboard});
+class _StatsRow extends StatelessWidget {
+  const _StatsRow({required this.dashboard});
 
   final DashboardData dashboard;
 
   @override
   Widget build(BuildContext context) {
-    final statTiles = dashboard.isStudent
-        ? <_StatTileModel>[
-            _StatTileModel(
-              label: 'Registered Courses',
-              value: dashboard.stats.registeredCourses.toString(),
-              icon: Icons.menu_book_rounded,
+    final tiles = dashboard.isStudent
+        ? [
+            _Stat(
+              'Courses',
+              dashboard.stats.registeredCourses.toString(),
+              Icons.menu_book_rounded,
             ),
-            _StatTileModel(
-              label: 'Credit Hours',
-              value: dashboard.stats.registeredCreditHours.toString(),
-              icon: Icons.timer_rounded,
+            _Stat(
+              'Credit Hours',
+              dashboard.stats.registeredCreditHours.toString(),
+              Icons.timer_rounded,
             ),
           ]
-        : <_StatTileModel>[
-            _StatTileModel(
-              label: 'Total Sessions',
-              value: dashboard.stats.totalSessions.toString(),
-              icon: Icons.event_note_rounded,
+        : [
+            _Stat(
+              'Sessions',
+              dashboard.stats.totalSessions.toString(),
+              Icons.event_note_rounded,
             ),
-            _StatTileModel(
-              label: 'Distinct Courses',
-              value: dashboard.stats.distinctCourseCount.toString(),
-              icon: Icons.auto_stories_rounded,
+            _Stat(
+              'Courses',
+              dashboard.stats.distinctCourseCount.toString(),
+              Icons.auto_stories_rounded,
             ),
-            _StatTileModel(
-              label: 'Enrolled Students',
-              value: dashboard.stats.enrolledStudents.toString(),
-              icon: Icons.groups_rounded,
+            _Stat(
+              'Students',
+              dashboard.stats.enrolledStudents.toString(),
+              Icons.groups_rounded,
             ),
           ];
 
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: statTiles.length,
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: MediaQuery.sizeOf(context).width < 520 ? 1 : 2,
-        mainAxisSpacing: AppSpacing.sm,
-        crossAxisSpacing: AppSpacing.sm,
-        childAspectRatio: MediaQuery.sizeOf(context).width < 520 ? 2.8 : 1.65,
-      ),
-      itemBuilder: (context, index) {
-        final tile = statTiles[index];
-        return AppCard(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          child: Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth >= 620) {
+          return Row(
             children: [
-              CircleAvatar(
-                backgroundColor: AppColors.accent,
-                child: Icon(tile.icon, color: AppColors.primary),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      tile.value,
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      tile.label,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ],
-                ),
-              ),
+              for (var i = 0; i < tiles.length; i++) ...[
+                Expanded(child: _StatCard(stat: tiles[i])),
+                if (i != tiles.length - 1) const SizedBox(width: AppSpacing.sm),
+              ],
             ],
+          );
+        }
+
+        final cardWidth = constraints.maxWidth < 360 ? 154.0 : 170.0;
+        return SizedBox(
+          height: 82,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: tiles.length,
+            separatorBuilder: (context, index) =>
+                const SizedBox(width: AppSpacing.sm),
+            itemBuilder: (context, index) =>
+                _StatCard(stat: tiles[index], width: cardWidth),
           ),
         );
       },
@@ -215,130 +321,325 @@ class _StatsGrid extends StatelessWidget {
   }
 }
 
-class _TodayScheduleCard extends StatelessWidget {
-  const _TodayScheduleCard({
-    required this.dashboard,
-    required this.onOpenAttendance,
-    required this.compact,
-  });
+class _Stat {
+  const _Stat(this.label, this.value, this.icon);
 
-  final DashboardData dashboard;
-  final VoidCallback onOpenAttendance;
-  final bool compact;
+  final String label;
+  final String value;
+  final IconData icon;
+}
+
+class _StatCard extends StatelessWidget {
+  const _StatCard({required this.stat, this.width});
+
+  final _Stat stat;
+  final double? width;
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Today Schedule',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-              compact
-                  ? IconButton(
-                      onPressed: onOpenAttendance,
-                      icon: const Icon(Icons.fact_check_rounded),
-                      tooltip: 'Attendance',
-                    )
-                  : TextButton(
-                      onPressed: onOpenAttendance,
-                      child: const Text('Attendance'),
-                    ),
-            ],
+    return Container(
+      width: width,
+      constraints: const BoxConstraints(minHeight: 78),
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.border),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0F0F172A),
+            blurRadius: 10,
+            offset: Offset(0, 4),
           ),
-          const SizedBox(height: AppSpacing.sm),
-          if (dashboard.todaySchedule.isEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(AppSpacing.md),
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(AppRadius.md),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: const Text('No sessions today.'),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: AppColors.primarySoft,
+              borderRadius: BorderRadius.circular(AppRadius.md),
             ),
-          ...dashboard.todaySchedule.map((slot) {
-            final stacked = MediaQuery.sizeOf(context).width < 360;
-            final title = '${slot.courseCode} ${slot.title}'.trim();
-
-            return Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-              child: Container(
-                padding: const EdgeInsets.all(AppSpacing.sm),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                  color: AppColors.background,
-                  border: Border.all(color: AppColors.border),
+            child: Icon(stat.icon, color: AppColors.primary, size: 20),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text(
+                    stat.value,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      height: 1,
+                    ),
+                  ),
                 ),
-                child: stacked
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: 6),
-                          Text('${slot.startTime} - ${slot.endTime}'),
-                          const SizedBox(height: 2),
-                          Text(slot.classroomLabel),
-                          if ((slot.teacherName ?? '').isNotEmpty) ...[
-                            const SizedBox(height: 2),
-                            Text('Teacher: ${slot.teacherName}'),
-                          ],
-                        ],
-                      )
-                    : Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  title,
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.titleMedium,
-                                ),
-                                const SizedBox(height: 4),
-                                Text('${slot.startTime} - ${slot.endTime}'),
-                                const SizedBox(height: 2),
-                                Text(slot.classroomLabel),
-                                if ((slot.teacherName ?? '').isNotEmpty) ...[
-                                  const SizedBox(height: 2),
-                                  Text('Teacher: ${slot.teacherName}'),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-              ),
-            );
-          }),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  stat.label,
+                  style: Theme.of(context).textTheme.bodySmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-class _StatTileModel {
-  const _StatTileModel({
-    required this.label,
-    required this.value,
-    required this.icon,
+class _ScheduleSection extends StatelessWidget {
+  const _ScheduleSection({
+    required this.dashboard,
+    required this.onOpenAttendance,
   });
 
-  final String label;
-  final String value;
-  final IconData icon;
+  final DashboardData dashboard;
+  final VoidCallback onOpenAttendance;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Today\'s Schedule',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            if (!dashboard.isStudent)
+              FilledButton.icon(
+                onPressed: onOpenAttendance,
+                icon: const Icon(Icons.fact_check_rounded, size: 16),
+                label: const Text('Attendance'),
+                style: FilledButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                  ),
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        if (dashboard.todaySchedule.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              border: Border.all(color: AppColors.border),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x0F0F172A),
+                  blurRadius: 10,
+                  offset: Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                const Icon(
+                  Icons.event_busy_rounded,
+                  size: 36,
+                  color: AppColors.textMuted,
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  'No sessions scheduled for today',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ],
+            ),
+          )
+        else
+          ...dashboard.todaySchedule.asMap().entries.map(
+            (entry) => _ScheduleTile(
+              item: entry.value,
+              isLast: entry.key == dashboard.todaySchedule.length - 1,
+              isStudent: dashboard.isStudent,
+            ),
+          ),
+        if (dashboard.isStudent && dashboard.todaySchedule.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.md),
+          Center(
+            child: FilledButton.icon(
+              onPressed: onOpenAttendance,
+              icon: const Icon(Icons.qr_code_2_rounded, size: 18),
+              label: const Text('View my QR Code'),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.lg,
+                  vertical: AppSpacing.sm,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.xl),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _ScheduleTile extends StatelessWidget {
+  const _ScheduleTile({
+    required this.item,
+    required this.isLast,
+    required this.isStudent,
+  });
+
+  final DashboardScheduleItem item;
+  final bool isLast;
+  final bool isStudent;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = '${item.courseCode} ${item.title}'.trim();
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: isLast ? 0 : AppSpacing.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Column(
+            children: [
+              const SizedBox(height: 3),
+              Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.primary,
+                  border: Border.all(color: Colors.white, width: 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.35),
+                      blurRadius: 4,
+                    ),
+                  ],
+                ),
+              ),
+              if (!isLast)
+                Container(
+                  width: 2,
+                  height: 52,
+                  margin: const EdgeInsets.symmetric(vertical: 3),
+                  color: AppColors.border,
+                ),
+            ],
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(AppRadius.lg),
+                border: Border.all(color: AppColors.border),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x0D0F172A),
+                    blurRadius: 8,
+                    offset: Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.access_time_rounded,
+                        size: 14,
+                        color: AppColors.textMuted,
+                      ),
+                      const SizedBox(width: AppSpacing.xs),
+                      Flexible(
+                        child: Text(
+                          '${item.startTime} - ${item.endTime}',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (item.classroomLabel.trim().isNotEmpty) ...[
+                        const SizedBox(width: 12),
+                        const Icon(
+                          Icons.location_on_rounded,
+                          size: 14,
+                          color: AppColors.textMuted,
+                        ),
+                        const SizedBox(width: AppSpacing.xs),
+                        Flexible(
+                          child: Text(
+                            item.classroomLabel,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (isStudent && (item.teacherName ?? '').isNotEmpty) ...[
+                    const SizedBox(height: AppSpacing.xs),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.person_outline_rounded,
+                          size: 14,
+                          color: AppColors.textMuted,
+                        ),
+                        const SizedBox(width: AppSpacing.xs),
+                        Expanded(
+                          child: Text(
+                            item.teacherName!,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

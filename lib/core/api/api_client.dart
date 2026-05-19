@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:mobile_flutter/app/router.dart';
 import 'package:mobile_flutter/core/config/app_config.dart';
 import 'package:mobile_flutter/core/storage/local_storage.dart';
 import 'package:mobile_flutter/core/utils/app_exception.dart';
@@ -11,6 +12,7 @@ class ApiClient {
     : _localStorage = localStorage ?? LocalStorage();
 
   final LocalStorage _localStorage;
+  bool _handlingSessionExpiry = false;
 
   Future<dynamic> get(
     String path, {
@@ -183,10 +185,55 @@ class ApiClient {
     }
 
     final message = _extractServerMessage(payload);
+    if (response.statusCode == 401) {
+      _expireSession();
+      throw AppException(
+        message ?? 'Session expired, please log in again.',
+        statusCode: response.statusCode,
+      );
+    }
+
+    if (response.statusCode == 403) {
+      final lowerMessage = (message ?? '').toLowerCase();
+      if (lowerMessage.contains('token expired') ||
+          lowerMessage.contains('invalid token')) {
+        _expireSession();
+        throw AppException(
+          lowerMessage.contains('expired')
+              ? 'Session expired, please log in again.'
+              : 'Your session is invalid. Please log in again.',
+          statusCode: response.statusCode,
+        );
+      }
+
+      throw AppException(
+        message ?? 'You do not have permission to perform this action.',
+        statusCode: response.statusCode,
+      );
+    }
+
     throw AppException(
       message ?? _defaultHttpMessage(response.statusCode),
       statusCode: response.statusCode,
     );
+  }
+
+  void _expireSession() {
+    if (_handlingSessionExpiry) {
+      return;
+    }
+
+    _handlingSessionExpiry = true;
+    _localStorage.clearToken().whenComplete(() {
+      final navigator = AppRouter.navigatorKey.currentState;
+      if (navigator != null && !AppRouter.isOnLoginRoute) {
+        navigator.pushNamedAndRemoveUntil(
+          AppRouter.loginRoute,
+          (route) => false,
+        );
+      }
+      _handlingSessionExpiry = false;
+    });
   }
 
   AppException _mapClientException(http.ClientException exception) {

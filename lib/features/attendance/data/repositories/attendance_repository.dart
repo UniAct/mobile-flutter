@@ -430,6 +430,7 @@ class AttendanceRepository {
   Future<void> submitQrScanLocally({
     required int scheduleSlotId,
     required int facultyMemberId,
+    required int studentId,
     required DateTime attendanceDate,
     required String startTime,
     required String endTime,
@@ -438,11 +439,16 @@ class AttendanceRepository {
     try {
       await localDataSource.enqueueSyncItem(
         actionType: 'qr_scan',
-        entityType: 'attendance_session',
-        entityId: scheduleSlotId,
+        entityType: 'attendance_qr_scan',
+        entityId: _attendanceQueueEntityId(
+          scheduleSlotId: scheduleSlotId,
+          studentId: studentId,
+          attendanceDate: attendanceDate,
+        ),
         payload: {
           'slotId': scheduleSlotId,
           'facultyMemberId': facultyMemberId,
+          'studentId': studentId,
           'startTime': startTime,
           'endTime': endTime,
           'sessionDate': attendanceDate.toIso8601String(),
@@ -454,6 +460,22 @@ class AttendanceRepository {
     } catch (e) {
       throw AppException('Failed to queue QR attendance locally: $e');
     }
+  }
+
+  int _attendanceQueueEntityId({
+    required int scheduleSlotId,
+    required int studentId,
+    required DateTime attendanceDate,
+  }) {
+    final key =
+        '$scheduleSlotId:$studentId:${attendanceDate.year}-'
+        '${attendanceDate.month}-${attendanceDate.day}';
+    var hash = 0x811c9dc5;
+    for (final codeUnit in key.codeUnits) {
+      hash ^= codeUnit;
+      hash = (hash * 0x01000193) & 0x7fffffff;
+    }
+    return hash;
   }
 
   Future<AttendanceModel> applyQrAttendanceLocally({

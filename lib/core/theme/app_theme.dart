@@ -1,29 +1,43 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
-  static const Color primary = Color(0xFF2563EB);
-  static const Color secondary = Color(0xFFE2E8F0);
-  static const Color background = Color(0xFFF8F9FB);
+  static const Color primary = Color(0xFF0F766E);
+  static const Color primaryDark = Color(0xFF115E59);
+  static const Color primarySoft = Color(0xFFCCFBF1);
+  static const Color secondary = Color(0xFF14B8A6);
+  static const Color tertiary = Color(0xFFD97706);
+  static const Color background = Color(0xFFF8FAFC);
   static const Color card = Color(0xFFFFFFFF);
-  static const Color textPrimary = Color(0xFF2D3748);
+  static const Color surfaceAlt = Color(0xFFF1F5F9);
+  static const Color textPrimary = Color(0xFF0F172A);
   static const Color textMuted = Color(0xFF64748B);
   static const Color border = Color(0xFFE2E8F0);
-  static const Color accent = Color(0xFFDBEAFE);
+  static const Color accent = Color(0xFFCCFBF1);
+  static const Color success = Color(0xFF16803C);
+  static const Color warning = Color(0xFFD97706);
+  static const Color error = Color(0xFFB42318);
 }
 
 class AppRadius {
-  static const double sm = 10;
-  static const double md = 14;
-  static const double lg = 18;
-  static const double xl = 24;
+  static const double sm = 8;
+  static const double md = 12;
+  static const double lg = 20;
+  static const double xl = 28;
 }
 
 class AppSpacing {
-  static const double xs = 8;
-  static const double sm = 12;
+  static const double xs = 4;
+  static const double sm = 8;
   static const double md = 16;
   static const double lg = 24;
   static const double xl = 32;
+}
+
+class AppElevation {
+  static const double level0 = 0;
+  static const double level1 = 1;
+  static const double level2 = 3;
+  static const double level3 = 6;
 }
 
 class AppTheme {
@@ -35,10 +49,19 @@ class AppTheme {
       colorScheme: const ColorScheme.light(
         primary: AppColors.primary,
         secondary: AppColors.secondary,
+        tertiary: AppColors.tertiary,
         surface: AppColors.card,
         onSurface: AppColors.textPrimary,
+        surfaceContainerHighest: AppColors.surfaceAlt,
+        error: AppColors.error,
       ),
       textTheme: base.textTheme.copyWith(
+        displayLarge: const TextStyle(
+          fontSize: 34,
+          fontWeight: FontWeight.w800,
+          color: AppColors.textPrimary,
+          height: 1.12,
+        ),
         headlineLarge: const TextStyle(
           fontSize: 30,
           fontWeight: FontWeight.w700,
@@ -67,6 +90,11 @@ class AppTheme {
           color: AppColors.textMuted,
           height: 1.5,
         ),
+        labelSmall: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: AppColors.textMuted,
+        ),
       ),
       cardTheme: CardThemeData(
         color: AppColors.card,
@@ -78,7 +106,7 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: const Color(0xFFF8FAFC),
+        fillColor: AppColors.surfaceAlt,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md,
           vertical: AppSpacing.sm,

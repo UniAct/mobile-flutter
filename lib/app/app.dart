@@ -5,9 +5,9 @@ import 'package:mobile_flutter/app/router.dart';
 import 'package:mobile_flutter/core/storage/local_storage.dart';
 import 'package:mobile_flutter/core/theme/app_theme.dart';
 import 'package:mobile_flutter/core/utils/connection_monitor.dart';
-import 'package:mobile_flutter/core/widgets/loading_indicator.dart';
 import 'package:mobile_flutter/features/auth/login_screen.dart';
 import 'package:mobile_flutter/features/home/home_screen.dart';
+import 'package:mobile_flutter/features/splash/splash_screen.dart';
 
 class UniActApp extends StatefulWidget {
   const UniActApp({super.key});
@@ -20,13 +20,11 @@ class _UniActAppState extends State<UniActApp> {
   final LocalStorage _localStorage = LocalStorage();
   final ConnectionMonitor _connectionMonitor = ConnectionMonitor();
 
-  late final Future<Widget> _startScreenFuture;
   StreamSubscription<bool>? _connectionSubscription;
 
   @override
   void initState() {
     super.initState();
-    _startScreenFuture = _getStartScreen();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
         return;
@@ -79,26 +77,10 @@ class _UniActAppState extends State<UniActApp> {
     return MaterialApp(
       title: 'UniAct',
       debugShowCheckedModeBanner: false,
+      navigatorKey: AppRouter.navigatorKey,
       theme: AppTheme.light(),
       onGenerateRoute: AppRouter.onGenerateRoute,
-      home: FutureBuilder<Widget>(
-        future: _startScreenFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Scaffold(
-              body: LoadingIndicator(
-                message: 'Loading...',
-              ),
-            );
-          }
-
-          if (snapshot.hasError) {
-            return const LoginScreen();
-          }
-
-          return snapshot.data ?? const LoginScreen();
-        },
-      ),
+      home: SplashScreen(onComplete: _getStartScreen),
     );
   }
 }

@@ -2,14 +2,14 @@ import 'package:flutter/foundation.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 /// Singleton Camera Manager for QR Scanner
-/// 
+///
 /// Problem solved: "Repeated camera recreation on widget rebuild"
-/// 
+///
 /// Original code in AttendanceScreen:
 ///   - Created new MobileScannerController in initState
 ///   - On every rebuild (e.g., orientation change, tab switch) controller recreated
 ///   - Result: Camera flicker, session restart, poor UX
-/// 
+///
 /// Solution:
 ///   - One controller per app lifetime
 ///   - Shared across all scanner instances

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:mobile_flutter/app/router.dart';
 import 'package:mobile_flutter/features/attendance/attendance_dependencies.dart';
 import 'package:mobile_flutter/core/theme/app_theme.dart';
@@ -23,6 +24,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final UserService _userService = UserService();
   final AuthService _authService = AuthService();
   final DashboardService _dashboardService = DashboardService();
@@ -157,8 +159,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _syncOfflineQueue() async {
-    if (_isSyncing || !_attendanceDependencies.isReady) {
+    if (_isSyncing) {
       return;
+    }
+
+    // Ensure dependencies are initialized before attempting sync.
+    if (!_attendanceDependencies.isReady) {
+      try {
+        await _attendanceDependencies.initialize();
+      } catch (e) {
+        if (mounted) {
+          AppHelpers.showError(context, AppHelpers.userErrorMessage(e));
+        }
+        return;
+      }
+      if (!mounted) {
+        return;
+      }
     }
 
     setState(() {
@@ -211,61 +228,78 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final dashboard = _dashboard;
 
     return Scaffold(
+      key: _scaffoldKey,
       appBar: AppBar(
         elevation: 0,
+        toolbarHeight: 76,
         backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
         surfaceTintColor: Colors.transparent,
+        iconTheme: const IconThemeData(color: Colors.white),
+        systemOverlayStyle: SystemUiOverlayStyle.light,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
+        ),
+        flexibleSpace: const DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF115E59), Color(0xFF0F766E)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
+        leadingWidth: 68,
+        leading: Padding(
+          padding: const EdgeInsetsDirectional.only(start: AppSpacing.md),
+          child: Center(
+            child: Material(
+              color: Colors.white24,
+              shape: const CircleBorder(),
+              clipBehavior: Clip.antiAlias,
+              child: IconButton(
+                tooltip: 'Open menu',
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                icon: const Icon(
+                  Icons.menu_rounded,
+                  color: Colors.white,
+                  size: 24,
+                ),
+              ),
+            ),
+          ),
+        ),
+        titleSpacing: AppSpacing.sm,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
               _selectedIndex == 0 ? 'Dashboard' : 'Attendance',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 color: Colors.white,
-                fontWeight: FontWeight.w600,
+                fontSize: 21,
+                fontWeight: FontWeight.w800,
+                height: 1.1,
               ),
             ),
+            const SizedBox(height: AppSpacing.xs),
             if (user != null)
               Text(
-                user.primaryRole,
+                !_isOnline ? 'Offline' : user.primaryRole,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.white70,
+                  color: !_isOnline
+                      ? const Color(0xFFFFEDD5)
+                      : Colors.white.withValues(alpha: 0.86),
                   fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.2,
                 ),
               ),
           ],
         ),
         centerTitle: false,
-        bottom: !_isOnline
-            ? PreferredSize(
-                preferredSize: const Size.fromHeight(36),
-                child: Container(
-                  width: double.infinity,
-                  color: Colors.orange.shade700,
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 6,
-                    horizontal: 12,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.cloud_off_rounded,
-                        size: 16,
-                        color: Colors.white,
-                      ),
-                      const SizedBox(width: 8),
-                      const Expanded(
-                        child: Text(
-                          'Offline mode - data may be outdated',
-                          style: TextStyle(color: Colors.white, fontSize: 12),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            : null,
         actions: [
           if (_pendingOfflineActions > 0)
             Padding(
@@ -277,8 +311,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.orange.shade700,
+                    color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.24),
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -302,29 +339,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ),
               ),
             ),
-          Tooltip(
-            message: 'Refresh data',
-            child: IconButton(
-              onPressed: _loadHome,
-              icon: const Icon(Icons.refresh_rounded),
-              color: Colors.white,
-            ),
-          ),
-          Tooltip(
-            message: 'Menu',
-            child: IconButton(
-              onPressed: () {
-                Scaffold.of(context).openDrawer();
-              },
-              icon: const Icon(Icons.menu_rounded),
-              color: Colors.white,
-            ),
-          ),
         ],
       ),
       drawer: _buildDrawer(user),
       body: _buildBody(user, dashboard),
-      floatingActionButton: _pendingOfflineActions > 0
+      floatingActionButton: _isOnline && _pendingOfflineActions > 0
           ? FloatingActionButton.extended(
               onPressed: _isSyncing ? null : _syncOfflineQueue,
               icon: _isSyncing
@@ -394,7 +413,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(AppRadius.lg),
                 gradient: const LinearGradient(
-                  colors: [Color(0xFF1D4ED8), Color(0xFF2563EB)],
+                  colors: [AppColors.primaryDark, AppColors.primary],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),

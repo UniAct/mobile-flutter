@@ -2,11 +2,20 @@ import 'package:drift/drift.dart';
 
 @TableIndex(name: 'idx_attendances_student', columns: {#studentId})
 @TableIndex(name: 'idx_attendances_date', columns: {#attendanceDate})
-@TableIndex(name: 'idx_attendances_course_session', columns: {#courseId, #sessionId})
+@TableIndex(
+  name: 'idx_attendances_course_session',
+  columns: {#courseId, #sessionId},
+)
 @TableIndex(name: 'idx_attendances_pending', columns: {#pendingSync})
-@TableIndex(name: 'idx_attendances_session_student', columns: {#attendanceSessionId, #studentId})
+@TableIndex(
+  name: 'idx_attendances_session_student',
+  columns: {#attendanceSessionId, #studentId},
+)
 @TableIndex(name: 'idx_attendances_offline_uuid', columns: {#offlineUuid})
-@TableIndex(name: 'idx_attendances_device_student', columns: {#deviceId, #studentId})
+@TableIndex(
+  name: 'idx_attendances_device_student',
+  columns: {#deviceId, #studentId},
+)
 class Attendances extends Table {
   IntColumn get id => integer().autoIncrement()();
 
@@ -27,8 +36,10 @@ class Attendances extends Table {
 
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
 
-  TextColumn get verificationMethod => text().nullable()(); // 'qr', 'manual', 'biometric'
-  TextColumn get verifiedBy => text().nullable()(); // staff member ID if manually entered
+  TextColumn get verificationMethod =>
+      text().nullable()(); // 'qr', 'manual', 'biometric'
+  TextColumn get verifiedBy =>
+      text().nullable()(); // staff member ID if manually entered
   TextColumn get notes => text().nullable()();
 
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
@@ -38,7 +49,7 @@ class Attendances extends Table {
 
   @override
   List<Set<Column>> get uniqueKeys => [
-        {offlineUuid},
-        {studentId, attendanceSessionId}, // One attendance per student per session
-      ];
+    {offlineUuid},
+    {studentId, attendanceSessionId}, // One attendance per student per session
+  ];
 }
