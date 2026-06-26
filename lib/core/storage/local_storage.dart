@@ -6,6 +6,10 @@ class LocalStorage {
   static const String _universityKey = 'university_name';
   static const String _dashboardCacheKey = 'dashboard_cache_json';
   static const String _dashboardCacheTimestampKey = 'dashboard_cache_ts';
+  static const String _timetableCacheKey = 'timetable_cache_json';
+  static const String _timetableCacheTimestampKey = 'timetable_cache_ts';
+  static const String _transcriptCacheKey = 'transcript_cache_json';
+  static const String _transcriptCacheTimestampKey = 'transcript_cache_ts';
 
   final SecurityService _securityService = SecurityService();
 
@@ -97,6 +101,42 @@ class LocalStorage {
       }
 
       return prefs.getString(_dashboardCacheKey);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> saveTimetableCache(String jsonString) async {
+    final prefs = await _prefs;
+    await prefs.setString(_timetableCacheKey, jsonString);
+    await prefs.setInt(
+      _timetableCacheTimestampKey,
+      DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+
+  Future<String?> getTimetableCache() async {
+    try {
+      final prefs = await _prefs;
+      return prefs.getString(_timetableCacheKey);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> saveTranscriptCache(String jsonString) async {
+    final prefs = await _prefs;
+    await prefs.setString(_transcriptCacheKey, jsonString);
+    await prefs.setInt(
+      _transcriptCacheTimestampKey,
+      DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+
+  Future<String?> getTranscriptCache() async {
+    try {
+      final prefs = await _prefs;
+      return prefs.getString(_transcriptCacheKey);
     } catch (_) {
       return null;
     }

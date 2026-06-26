@@ -15,6 +15,8 @@ import 'package:mobile_flutter/features/home/dashboard_models.dart';
 import 'package:mobile_flutter/features/home/dashboard_screen.dart';
 import 'package:mobile_flutter/features/home/dashboard_service.dart';
 import 'package:mobile_flutter/features/home/user_service.dart';
+import 'package:mobile_flutter/features/timetable/timetable_screen.dart';
+import 'package:mobile_flutter/features/transcript/transcript_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -276,7 +278,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              _selectedIndex == 0 ? 'Dashboard' : 'Attendance',
+              _pageTitle(),
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 color: Colors.white,
                 fontSize: 21,
@@ -378,27 +380,51 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       return const Center(child: CircularProgressIndicator());
     }
 
+    final selectedIndex = _selectedIndex == 3 && !_isStudent(user, dashboard)
+        ? 0
+        : _selectedIndex;
+
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 260),
-      child: _selectedIndex == 0
-          ? DashboardScreen(
-              key: const ValueKey('dashboard'),
-              user: user,
-              dashboard: dashboard,
-              onRefresh: _loadHome,
-              onOpenAttendance: () {
-                setState(() {
-                  _selectedIndex = 1;
-                });
-              },
-            )
-          : AttendanceScreen(
-              key: const ValueKey('attendance'),
-              user: user!,
-              dashboard: dashboard!,
-              dependencies: _attendanceDependencies,
-            ),
+      child: switch (selectedIndex) {
+        1 => AttendanceScreen(
+          key: const ValueKey('attendance'),
+          user: user!,
+          dashboard: dashboard!,
+          dependencies: _attendanceDependencies,
+        ),
+        2 => const TimetableScreen(key: ValueKey('timetable')),
+        3 => const TranscriptScreen(key: ValueKey('transcript')),
+        _ => DashboardScreen(
+          key: const ValueKey('dashboard'),
+          user: user,
+          dashboard: dashboard,
+          onRefresh: _loadHome,
+          onOpenAttendance: () {
+            setState(() {
+              _selectedIndex = 1;
+            });
+          },
+        ),
+      },
     );
+  }
+
+  bool _isStudent(UserModel? user, DashboardData? dashboard) {
+    if (dashboard?.isStudent == true) {
+      return true;
+    }
+
+    return user?.roles.any((role) => role.toLowerCase() == 'student') ?? false;
+  }
+
+  String _pageTitle() {
+    return switch (_selectedIndex) {
+      1 => 'Attendance',
+      2 => 'Timetable',
+      3 => 'Transcript',
+      _ => 'Dashboard',
+    };
   }
 
   Widget _buildDrawer(UserModel? user) {
@@ -465,6 +491,29 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 });
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.calendar_view_week_rounded),
+              title: const Text('Timetable'),
+              selected: _selectedIndex == 2,
+              onTap: () {
+                Navigator.pop(context);
+                setState(() {
+                  _selectedIndex = 2;
+                });
+              },
+            ),
+            if (_isStudent(user, _dashboard))
+              ListTile(
+                leading: const Icon(Icons.history_edu_rounded),
+                title: const Text('Transcript'),
+                selected: _selectedIndex == 3,
+                onTap: () {
+                  Navigator.pop(context);
+                  setState(() {
+                    _selectedIndex = 3;
+                  });
+                },
+              ),
             const Spacer(),
             Padding(
               padding: const EdgeInsets.all(AppSpacing.md),

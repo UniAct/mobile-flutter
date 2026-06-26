@@ -63,6 +63,15 @@ class DashboardScreen extends StatelessWidget {
                                       ),
                                       const SizedBox(height: AppSpacing.md),
                                       _StatsRow(dashboard: currentDashboard),
+                                      if (currentDashboard.isStudent &&
+                                          currentDashboard.creditProgress !=
+                                              null) ...[
+                                        const SizedBox(height: AppSpacing.md),
+                                        _CreditProgressSection(
+                                          progress:
+                                              currentDashboard.creditProgress!,
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 ),
@@ -89,6 +98,14 @@ class DashboardScreen extends StatelessWidget {
                                 ),
                                 const SizedBox(height: AppSpacing.md),
                                 _StatsRow(dashboard: currentDashboard),
+                                if (currentDashboard.isStudent &&
+                                    currentDashboard.creditProgress !=
+                                        null) ...[
+                                  const SizedBox(height: AppSpacing.md),
+                                  _CreditProgressSection(
+                                    progress: currentDashboard.creditProgress!,
+                                  ),
+                                ],
                                 const SizedBox(height: AppSpacing.md),
                                 _ScheduleSection(
                                   dashboard: currentDashboard,
@@ -317,6 +334,152 @@ class _StatsRow extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _CreditProgressSection extends StatelessWidget {
+  const _CreditProgressSection({required this.progress});
+
+  final CreditProgress progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final percent = progress.percent.clamp(0, 100);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.border),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0F0F172A),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFECFDF5),
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                ),
+                child: const Icon(
+                  Icons.workspace_premium_rounded,
+                  color: AppColors.success,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Credit Hours Achievement',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    Text(
+                      '${progress.completedCourses} graded courses completed',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                '${percent.toStringAsFixed(0)}%',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.xl),
+            child: LinearProgressIndicator(
+              minHeight: 10,
+              value: percent / 100,
+              backgroundColor: AppColors.surfaceAlt,
+              color: AppColors.primary,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            '${progress.completedCreditHours} of ${progress.totalRequiredCreditHours} credit hours completed',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (progress.segments.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.md),
+            ...progress.segments.map(
+              (segment) => Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                child: _CreditSegmentRow(segment: segment),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _CreditSegmentRow extends StatelessWidget {
+  const _CreditSegmentRow({required this.segment});
+
+  final CreditProgressSegment segment;
+
+  @override
+  Widget build(BuildContext context) {
+    final percent = segment.percent.clamp(0, 100);
+
+    return Row(
+      children: [
+        SizedBox(
+          width: 78,
+          child: Text(
+            segment.label,
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: AppColors.textPrimary),
+          ),
+        ),
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.xl),
+            child: LinearProgressIndicator(
+              minHeight: 7,
+              value: percent / 100,
+              backgroundColor: AppColors.surfaceAlt,
+              color: segment.label == 'Program'
+                  ? AppColors.tertiary
+                  : AppColors.secondary,
+            ),
+          ),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        SizedBox(
+          width: 72,
+          child: Text(
+            '${segment.completedCreditHours}/${segment.requiredCreditHours} hrs',
+            textAlign: TextAlign.end,
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
+        ),
+      ],
     );
   }
 }
