@@ -77,7 +77,7 @@ class SearchableDropdown extends StatelessWidget {
               child: ListView.separated(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 itemCount: options.length,
-                separatorBuilder: (_, _) => const Divider(height: 1),
+                separatorBuilder: (context, index) => const Divider(height: 1),
                 itemBuilder: (context, index) {
                   final item = options[index];
                   return InkWell(

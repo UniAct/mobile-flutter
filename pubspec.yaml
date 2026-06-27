@@ -47,6 +47,8 @@ dependencies:
   bloc: ^8.1.2
   path_provider: ^2.1.2
   equatable: ^2.0.5
+  file_picker: ^8.1.7
+  url_launcher: ^6.3.1
 
   # Security Packages
   flutter_secure_storage: ^9.2.2
@@ -67,6 +69,9 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+
+dependency_overrides:
+  lints: 6.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

@@ -15,6 +15,7 @@ import 'package:mobile_flutter/features/home/dashboard_models.dart';
 import 'package:mobile_flutter/features/home/dashboard_screen.dart';
 import 'package:mobile_flutter/features/home/dashboard_service.dart';
 import 'package:mobile_flutter/features/home/user_service.dart';
+import 'package:mobile_flutter/features/learning_groups/learning_groups_screen.dart';
 import 'package:mobile_flutter/features/timetable/timetable_screen.dart';
 import 'package:mobile_flutter/features/transcript/transcript_screen.dart';
 
@@ -395,6 +396,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ),
         2 => const TimetableScreen(key: ValueKey('timetable')),
         3 => const TranscriptScreen(key: ValueKey('transcript')),
+        4 => const LearningGroupsScreen(key: ValueKey('learning-groups')),
         _ => DashboardScreen(
           key: const ValueKey('dashboard'),
           user: user,
@@ -423,6 +425,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       1 => 'Attendance',
       2 => 'Timetable',
       3 => 'Transcript',
+      4 => 'Learning Groups',
       _ => 'Dashboard',
     };
   }
@@ -514,6 +517,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   });
                 },
               ),
+            ListTile(
+              leading: const Icon(Icons.groups_2_rounded),
+              title: const Text('Learning Groups'),
+              selected: _selectedIndex == 4,
+              onTap: () {
+                Navigator.pop(context);
+                setState(() {
+                  _selectedIndex = 4;
+                });
+              },
+            ),
             const Spacer(),
             Padding(
               padding: const EdgeInsets.all(AppSpacing.md),

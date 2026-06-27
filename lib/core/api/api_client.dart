@@ -76,6 +76,78 @@ class ApiClient {
     }
   }
 
+  Future<dynamic> patch(
+    String path, {
+    bool requiresAuth = true,
+    Map<String, String>? headers,
+    Map<String, dynamic>? body,
+  }) async {
+    final requestHeaders = await _buildHeaders(
+      requiresAuth: requiresAuth,
+      extraHeaders: headers,
+    );
+
+    try {
+      final response = await http
+          .patch(
+            _buildUri(path),
+            headers: requestHeaders,
+            body: body == null ? null : jsonEncode(body),
+          )
+          .timeout(
+            const Duration(seconds: 5),
+            onTimeout: () => throw SocketException('Connection timeout'),
+          );
+
+      return _handleResponse(response);
+    } on SocketException {
+      throw AppException(
+        'Backend is disconnected. Please make sure the server is running and reachable.',
+        isNetworkError: true,
+      );
+    } on http.ClientException catch (e) {
+      throw _mapClientException(e);
+    }
+  }
+
+  Future<dynamic> multipartPost(
+    String path, {
+    bool requiresAuth = true,
+    Map<String, String>? headers,
+    Map<String, String>? fields,
+    List<http.MultipartFile>? files,
+  }) async {
+    final requestHeaders = await _buildHeaders(
+      requiresAuth: requiresAuth,
+      extraHeaders: headers,
+      includeJsonContentType: false,
+    );
+
+    try {
+      final request = http.MultipartRequest('POST', _buildUri(path))
+        ..headers.addAll(requestHeaders)
+        ..fields.addAll(fields ?? const <String, String>{});
+
+      if (files != null) {
+        request.files.addAll(files);
+      }
+
+      final streamed = await request.send().timeout(
+        const Duration(seconds: 30),
+        onTimeout: () => throw SocketException('Connection timeout'),
+      );
+      final response = await http.Response.fromStream(streamed);
+      return _handleResponse(response);
+    } on SocketException {
+      throw AppException(
+        'Backend is disconnected. Please make sure the server is running and reachable.',
+        isNetworkError: true,
+      );
+    } on http.ClientException catch (e) {
+      throw _mapClientException(e);
+    }
+  }
+
   Future<dynamic> put(
     String path, {
     bool requiresAuth = true,
@@ -155,9 +227,10 @@ class ApiClient {
   Future<Map<String, String>> _buildHeaders({
     required bool requiresAuth,
     Map<String, String>? extraHeaders,
+    bool includeJsonContentType = true,
   }) async {
     final headers = <String, String>{
-      'Content-Type': 'application/json',
+      if (includeJsonContentType) 'Content-Type': 'application/json',
       if (extraHeaders != null) ...extraHeaders,
     };
 

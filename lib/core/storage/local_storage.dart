@@ -10,6 +10,7 @@ class LocalStorage {
   static const String _timetableCacheTimestampKey = 'timetable_cache_ts';
   static const String _transcriptCacheKey = 'transcript_cache_json';
   static const String _transcriptCacheTimestampKey = 'transcript_cache_ts';
+  static const String _learningGroupsCachePrefix = 'learning_groups_cache_';
 
   final SecurityService _securityService = SecurityService();
 
@@ -137,6 +138,20 @@ class LocalStorage {
     try {
       final prefs = await _prefs;
       return prefs.getString(_transcriptCacheKey);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> saveLearningGroupsCache(String key, String jsonString) async {
+    final prefs = await _prefs;
+    await prefs.setString('$_learningGroupsCachePrefix$key', jsonString);
+  }
+
+  Future<String?> getLearningGroupsCache(String key) async {
+    try {
+      final prefs = await _prefs;
+      return prefs.getString('$_learningGroupsCachePrefix$key');
     } catch (_) {
       return null;
     }
