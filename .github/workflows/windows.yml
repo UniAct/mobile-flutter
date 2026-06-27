@@ -13,13 +13,29 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.41.5
           cache: true
+
+      - name: Create .env from GitHub Secret
+        shell: pwsh
+        run: |
+          @"
+          ${{ secrets.DOTENV }}
+          "@ | Out-File -FilePath .env -Encoding utf8
+
+      - name: Verify .env exists
+        shell: pwsh
+        run: |
+          if (Test-Path .env) {
+            Write-Host ".env created successfully."
+          } else {
+            Write-Error ".env was not created!"
+          }
 
       - name: Install dependencies
         run: flutter pub get
