@@ -567,8 +567,20 @@ class SyncEngine {
         debugPrint('[SyncEngine] Pushing item ${item.id} (${item.actionType})');
 
         final startTime = DateTime.now();
-        await remoteDataSource.executeSyncItem(item);
+        final syncResult = await remoteDataSource.executeSyncItem(item);
         final duration = DateTime.now().difference(startTime).inMilliseconds;
+
+        if (syncResult != null && syncResult.scheduleSlotId > 0) {
+          final records = syncResult.serverRecords.isNotEmpty
+              ? syncResult.serverRecords
+              : syncResult.records;
+          await localDataSource.reconcileSyncedAttendance(
+            scheduleSlotId: syncResult.scheduleSlotId,
+            sessionId: syncResult.sessionId,
+            attendanceDate: syncResult.sessionDate,
+            records: records,
+          );
+        }
 
         await syncRepository.markAsSuccess(item.id);
         debugPrint('[SyncEngine] Item ${item.id} synced in ${duration}ms');

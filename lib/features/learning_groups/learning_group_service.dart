@@ -127,11 +127,7 @@ class LearningGroupService {
       '/learning-group/$groupId/posts/$postId/comments',
     );
     final data = _extractData(response);
-    final items = data is List<dynamic> ? data : const <dynamic>[];
-    return items
-        .whereType<Map<String, dynamic>>()
-        .map(LearningGroupComment.fromJson)
-        .toList();
+    return _parseComments(data);
   }
 
   Future<LearningGroupComment> createComment(
@@ -181,10 +177,13 @@ class LearningGroupService {
 
   List<LearningGroupSummary> _parseGroupList(dynamic data) {
     final items = data is List<dynamic> ? data : const <dynamic>[];
-    return items
+    return _dedupeBy<int, LearningGroupSummary>(
+      items
         .whereType<Map<String, dynamic>>()
         .map(LearningGroupSummary.fromJson)
-        .toList();
+        .where((group) => group.groupId > 0),
+      (group) => group.groupId,
+    );
   }
 
   LearningGroupDetails _parseDetails(dynamic data) {
@@ -196,10 +195,24 @@ class LearningGroupService {
   List<LearningGroupPost> _parsePosts(dynamic data) {
     final page = data is Map<String, dynamic> ? data : const {};
     final items = page['items'] as List<dynamic>? ?? const [];
-    return items
+    return _dedupeBy<int, LearningGroupPost>(
+      items
         .whereType<Map<String, dynamic>>()
         .map(LearningGroupPost.fromJson)
-        .toList();
+        .where((post) => post.postId > 0),
+      (post) => post.postId,
+    );
+  }
+
+  List<LearningGroupComment> _parseComments(dynamic data) {
+    final items = data is List<dynamic> ? data : const <dynamic>[];
+    return _dedupeBy<int, LearningGroupComment>(
+      items
+          .whereType<Map<String, dynamic>>()
+          .map(LearningGroupComment.fromJson)
+          .where((comment) => comment.id > 0),
+      (comment) => comment.id,
+    );
   }
 
   Future<void> _saveCache(String key, dynamic response) async {
@@ -219,6 +232,17 @@ class LearningGroupService {
       debugPrint('[LearningGroupService] Cache read failed: $e');
       return null;
     }
+  }
+
+  List<T> _dedupeBy<K, T>(Iterable<T> items, K Function(T item) keyOf) {
+    final result = <T>[];
+    final seen = <K>{};
+    for (final item in items) {
+      if (seen.add(keyOf(item))) {
+        result.add(item);
+      }
+    }
+    return result;
   }
 
   int _toInt(dynamic value) {

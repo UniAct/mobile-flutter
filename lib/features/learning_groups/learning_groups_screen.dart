@@ -976,7 +976,10 @@ class _CommentsSheetState extends State<_CommentsSheet> {
       );
       if (!mounted) return;
       setState(() {
-        _comments = [..._comments, comment];
+        _comments = [
+          ..._comments.where((item) => item.id != comment.id),
+          comment,
+        ];
         _controller.clear();
       });
       widget.onCommentAdded();

@@ -607,6 +607,100 @@ class AttendanceLocalDataSource {
     });
   }
 
+  Future<void> reconcileSyncedAttendance({
+    required int scheduleSlotId,
+    required int sessionId,
+    required DateTime attendanceDate,
+    required List<Map<String, dynamic>> records,
+  }) async {
+    final normalizedDate = DateTime.utc(
+      attendanceDate.year,
+      attendanceDate.month,
+      attendanceDate.day,
+      attendanceDate.hour,
+      attendanceDate.minute,
+      attendanceDate.second,
+      attendanceDate.millisecond,
+      attendanceDate.microsecond,
+    );
+    final now = DateTime.now();
+
+    await database.transaction(() async {
+      for (final record in records) {
+        final studentId = _toInt(record['studentId']);
+        if (studentId <= 0) {
+          continue;
+        }
+
+        final status = _normalizeStatus(record['status']);
+        final existing = await _findAttendanceByIdentity(
+          studentId: studentId,
+          courseId: scheduleSlotId,
+          sessionId: scheduleSlotId,
+          attendanceDate: normalizedDate,
+        );
+
+        if (existing != null) {
+          await (database.update(database.attendances)
+                ..where((tbl) => tbl.id.equals(existing.id)))
+              .write(
+                AttendancesCompanion(
+                  sessionId: Value(sessionId),
+                  attendanceSessionId: Value(sessionId),
+                  status: Value(status),
+                  pendingSync: const Value(false),
+                  isSynced: const Value(true),
+                  syncError: const Value(null),
+                  syncedAt: Value(now),
+                  updatedAt: Value(now),
+                ),
+              );
+          continue;
+        }
+
+        await database
+            .into(database.attendances)
+            .insert(
+              AttendancesCompanion(
+                studentId: Value(studentId),
+                attendanceDate: Value(normalizedDate),
+                status: Value(status),
+                courseId: Value(scheduleSlotId),
+                sessionId: Value(sessionId),
+                attendanceSessionId: Value(sessionId),
+                offlineUuid: Value(_generateUuid()),
+                deviceId: const Value('local-device'),
+                createdAt: Value(now),
+                updatedAt: Value(now),
+                pendingSync: const Value(false),
+                isSynced: const Value(true),
+                syncedAt: Value(now),
+              ),
+              mode: InsertMode.insertOrReplace,
+            );
+      }
+    });
+
+    await saveSessionSnapshot(
+      scheduleSlotId: scheduleSlotId,
+      attendanceDate: attendanceDate,
+      session: <String, dynamic>{
+        'id': sessionId,
+        'scheduleSlotId': scheduleSlotId,
+        'sessionDate': attendanceDate.toIso8601String(),
+        'attendance': records
+            .map(
+              (record) => <String, dynamic>{
+                'studentId': record['studentId'],
+                'status': _normalizeStatus(record['status']),
+                if (record['notes'] != null) 'notes': record['notes'],
+              },
+            )
+            .toList(),
+      },
+    );
+  }
+
   Future<Map<String, dynamic>?> loadSessionSnapshot({
     required int scheduleSlotId,
     required DateTime attendanceDate,
@@ -763,7 +857,7 @@ class AttendanceLocalDataSource {
             .map(
               (item) => <String, dynamic>{
                 'studentId': item['studentId'],
-                'status': (item['status'] ?? 'absent').toString(),
+                'status': _normalizeStatus(item['status']),
                 if (item['notes'] != null) 'notes': item['notes'],
               },
             )
@@ -774,6 +868,32 @@ class AttendanceLocalDataSource {
   static Map<String, dynamic> _parseJson(String json) {
     final decoded = jsonDecode(json);
     return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+  }
+
+  String _normalizeStatus(dynamic value) {
+    final raw = (value ?? 'absent').toString().trim().toLowerCase();
+    switch (raw) {
+      case 'present':
+        return 'present';
+      case 'late':
+        return 'late';
+      case 'excused':
+        return 'excused';
+      case 'medical':
+        return 'medical';
+      default:
+        return 'absent';
+    }
+  }
+
+  int _toInt(dynamic value) {
+    if (value is int) {
+      return value;
+    }
+    if (value is num) {
+      return value.toInt();
+    }
+    return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 
   (DateTime, DateTime) _dayRange(DateTime date) {

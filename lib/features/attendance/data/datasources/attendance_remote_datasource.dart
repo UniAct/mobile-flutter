@@ -176,54 +176,50 @@ class AttendanceRemoteDataSource {
     }
   }
 
-  Future<void> executeSyncItem(SyncQueueModel item) async {
+  Future<AttendanceSyncResult?> executeSyncItem(SyncQueueModel item) async {
     try {
       if (item.actionType == '_sync_meta' || item.actionType == 'delta_sync') {
         debugPrint(
           '[RemoteDataSource] Skipping internal item: ${item.actionType}',
         );
-        return;
+        return null;
       }
 
       final payload = jsonDecode(item.payloadJson);
 
       switch (item.actionType) {
         case 'manual_batch':
-          await _submitManualBatchOnline(payload as Map<String, dynamic>);
-          break;
+          return await _submitManualBatchOnline(payload as Map<String, dynamic>);
 
         case 'qr_scan':
-          await _submitQrOnline(payload as Map<String, dynamic>);
-          break;
+          return await _submitQrOnline(payload as Map<String, dynamic>);
 
         case 'mark_attendance':
-          await _submitSingleAttendanceOnline(payload as Map<String, dynamic>);
-          break;
+          return await _submitSingleAttendanceOnline(payload as Map<String, dynamic>);
 
         case 'update_attendance':
-          await _submitSingleAttendanceOnline(payload as Map<String, dynamic>);
-          break;
+          return await _submitSingleAttendanceOnline(payload as Map<String, dynamic>);
 
         case 'delete_attendance':
           debugPrint(
             '[RemoteDataSource] Backend has no attendance delete endpoint; '
             'leaving item ${item.id} for a future contract.',
           );
-          break;
+          return null;
 
         default:
           debugPrint(
             '[RemoteDataSource] Unknown sync action "${item.actionType}" '
             'for item ${item.id}; skipping',
           );
-          return;
+          return null;
       }
     } on AppException {
       rethrow;
     }
   }
 
-  Future<void> _submitSingleAttendanceOnline(
+  Future<AttendanceSyncResult> _submitSingleAttendanceOnline(
     Map<String, dynamic> payload,
   ) async {
     final sessionId = _toInt(
@@ -236,7 +232,7 @@ class AttendanceRemoteDataSource {
       );
     }
 
-    await apiClient.post(
+    final response = await apiClient.post(
       '/attendance/session/$sessionId/attendances',
       requiresAuth: true,
       body: <String, dynamic>{
@@ -250,9 +246,22 @@ class AttendanceRemoteDataSource {
         ],
       },
     );
+
+    return AttendanceSyncResult(
+      scheduleSlotId: _toInt(payload['slotId'] ?? payload['courseId']),
+      sessionId: sessionId,
+      sessionDate: _toDate((payload['attendanceDate'] ?? payload['sessionDate'] ?? '').toString()),
+      records: [
+        {
+          'studentId': studentId,
+          'status': (payload['status'] ?? 'absent').toString().toLowerCase(),
+        },
+      ],
+      serverRecords: _extractDataList(response),
+    );
   }
 
-  Future<void> _submitManualBatchOnline(Map<String, dynamic> payload) async {
+  Future<AttendanceSyncResult> _submitManualBatchOnline(Map<String, dynamic> payload) async {
     final slotId = _toInt(payload['slotId']);
     final facultyMemberId = _toInt(payload['facultyMemberId']);
     final startTime = (payload['startTime'] ?? '').toString();
@@ -282,7 +291,7 @@ class AttendanceRemoteDataSource {
         })
         .toList();
 
-    await apiClient.post(
+    final response = await apiClient.post(
       '/attendance/session/$sessionId/attendances',
       requiresAuth: true,
       body: <String, dynamic>{
@@ -290,9 +299,17 @@ class AttendanceRemoteDataSource {
         'records': records,
       },
     );
+
+    return AttendanceSyncResult(
+      scheduleSlotId: slotId,
+      sessionId: sessionId,
+      sessionDate: _toDate((payload['sessionDate'] ?? '').toString()),
+      records: records,
+      serverRecords: _extractDataList(response),
+    );
   }
 
-  Future<void> _submitQrOnline(Map<String, dynamic> payload) async {
+  Future<AttendanceSyncResult> _submitQrOnline(Map<String, dynamic> payload) async {
     final slotId = _toInt(payload['slotId']);
     final facultyMemberId = _toInt(payload['facultyMemberId']);
     final startTime = (payload['startTime'] ?? '').toString();
@@ -309,7 +326,7 @@ class AttendanceRemoteDataSource {
       sessionDateIso: (payload['sessionDate'] ?? '').toString(),
     );
 
-    await apiClient.post(
+    final response = await apiClient.post(
       '/attendance/session/$sessionId/scan',
       requiresAuth: true,
       body: <String, dynamic>{
@@ -319,6 +336,19 @@ class AttendanceRemoteDataSource {
         ),
         'status': (payload['status'] ?? 'present').toString().toLowerCase(),
       },
+    );
+
+    return AttendanceSyncResult(
+      scheduleSlotId: slotId,
+      sessionId: sessionId,
+      sessionDate: _toDate((payload['sessionDate'] ?? '').toString()),
+      records: [
+        {
+          'studentId': studentId,
+          'status': (payload['status'] ?? 'present').toString().toLowerCase(),
+        },
+      ],
+      serverRecords: [_extractData(response)],
     );
   }
 
@@ -397,6 +427,17 @@ class AttendanceRemoteDataSource {
     return <String, dynamic>{};
   }
 
+  List<Map<String, dynamic>> _extractDataList(dynamic response) {
+    if (response is Map<String, dynamic>) {
+      final data = response['data'];
+      if (data is List<dynamic>) {
+        return data.whereType<Map<String, dynamic>>().toList();
+      }
+    }
+
+    return const <Map<String, dynamic>>[];
+  }
+
   DateTime _toUtcDateOnly(DateTime date) {
     return DateTime.utc(date.year, date.month, date.day);
   }
@@ -427,4 +468,20 @@ class AttendanceRemoteDataSource {
     final minute = parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0;
     return DateTime(date.year, date.month, date.day, hour, minute);
   }
+}
+
+class AttendanceSyncResult {
+  const AttendanceSyncResult({
+    required this.scheduleSlotId,
+    required this.sessionId,
+    required this.sessionDate,
+    required this.records,
+    required this.serverRecords,
+  });
+
+  final int scheduleSlotId;
+  final int sessionId;
+  final DateTime sessionDate;
+  final List<Map<String, dynamic>> records;
+  final List<Map<String, dynamic>> serverRecords;
 }
