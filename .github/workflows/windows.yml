@@ -21,21 +21,23 @@ jobs:
           flutter-version: 3.41.5
           cache: true
 
-      - name: Create .env from GitHub Secret
+      - name: Verify .env and export API base URL
+        id: env
         shell: pwsh
         run: |
-          @"
-          ${{ secrets.DOTENV }}
-          "@ | Out-File -FilePath .env -Encoding utf8
-
-      - name: Verify .env exists
-        shell: pwsh
-        run: |
-          if (Test-Path .env) {
-            Write-Host ".env created successfully."
-          } else {
-            Write-Error ".env was not created!"
+          if (!(Test-Path .env)) {
+            Write-Error ".env was not created or committed!"
           }
+
+          $apiBaseUrl = (Get-Content .env | Where-Object { $_ -match '^API_BASE_URL=' } | Select-Object -First 1) -replace '^API_BASE_URL=', ''
+          $apiBaseUrl = $apiBaseUrl.Trim().Trim('"').Trim("'")
+
+          if ([string]::IsNullOrWhiteSpace($apiBaseUrl)) {
+            Write-Error "API_BASE_URL is missing from .env"
+          }
+
+          "API_BASE_URL=$apiBaseUrl" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "API_BASE_URL configured."
 
       - name: Install dependencies
         run: flutter pub get
@@ -44,10 +46,21 @@ jobs:
         run: flutter config --enable-windows-desktop
 
       - name: Build Windows
-        run: flutter build windows --release
+        run: flutter build windows --release --dart-define=API_BASE_URL="${{ env.API_BASE_URL }}"
+
+      - name: Verify Windows bundle config
+        shell: pwsh
+        run: |
+          $envAsset = "build/windows/x64/runner/Release/data/flutter_assets/.env"
+          if (Test-Path $envAsset) {
+            Write-Host "Flutter asset .env exists in Windows bundle."
+          } else {
+            Write-Warning "Flutter asset .env is missing; dart-define API_BASE_URL fallback is embedded."
+          }
 
       - name: Upload Windows Release
         uses: actions/upload-artifact@v4
         with:
           name: windows-release
+          include-hidden-files: true
           path: build/windows/x64/runner/Release
