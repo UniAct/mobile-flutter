@@ -393,10 +393,12 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
             );
       }
 
-      if (_isAlreadyMarked(
+      final existingAttendanceStatus = _existingAttendanceStatus(
         resolvedStudentId,
         sessionSnapshot: sessionSnapshot,
-      )) {
+      );
+      if (existingAttendanceStatus == 'present' ||
+          existingAttendanceStatus == 'late') {
         emit(
           state.copyWith(
             errorMessage: '$displayLabel attendance already taken.',
@@ -552,8 +554,9 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
         continue;
       }
 
-      final status = (record['status'] ?? '').toString().toLowerCase();
-      attendanceByStudentId[studentId] = status == 'present';
+      final status = _normalizeAttendanceStatus(record['status']);
+      attendanceByStudentId[studentId] =
+          status == 'present' || status == 'late';
     }
 
     final updatedPresent = Map<int, bool>.from(state.presentMap);
@@ -937,20 +940,38 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
     return null;
   }
 
-  bool _isAlreadyMarked(
+  String? _existingAttendanceStatus(
     int studentId, {
     Map<String, dynamic>? sessionSnapshot,
   }) {
-    if (state.alreadyMarkedMap[studentId] == true) {
-      return true;
-    }
-
     final effectiveSnapshot = sessionSnapshot ?? state.sessionSnapshot;
     final attendance =
         (effectiveSnapshot?['attendance'] as List<dynamic>? ??
                 const <dynamic>[])
             .whereType<Map<String, dynamic>>();
-    return attendance.any((item) => _toInt(item['studentId']) == studentId);
+    for (final item in attendance) {
+      if (_toInt(item['studentId']) == studentId) {
+        return _normalizeAttendanceStatus(item['status']);
+      }
+    }
+
+    if (state.alreadyMarkedMap[studentId] == true) {
+      return (state.presentMap[studentId] ?? false) ? 'present' : 'absent';
+    }
+
+    return null;
+  }
+
+  String _normalizeAttendanceStatus(dynamic value) {
+    final normalized = value?.toString().trim().toLowerCase() ?? '';
+    return switch (normalized) {
+      'present' => 'present',
+      'late' => 'late',
+      'absent' => 'absent',
+      'excused' => 'excused',
+      'medical' => 'medical',
+      _ => normalized,
+    };
   }
 
   String _formatStudentLabel({

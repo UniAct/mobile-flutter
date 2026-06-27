@@ -888,25 +888,20 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                     : null,
                 child: CheckboxListTile(
                   value: isPresent,
-                  onChanged: alreadyMarked
-                      ? null
-                      : (value) {
-                          context.read<AttendanceBloc>().add(
-                            AttendanceMarkToggled(
-                              studentId: student.studentId,
-                              isPresent: value ?? false,
-                            ),
-                          );
-                        },
+                  onChanged: (value) {
+                    context.read<AttendanceBloc>().add(
+                      AttendanceMarkToggled(
+                        studentId: student.studentId,
+                        isPresent: value ?? false,
+                      ),
+                    );
+                  },
                   title: Row(
                     children: [
                       Expanded(
                         child: Text(
                           student.fullName,
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(
-                                color: alreadyMarked ? Colors.green : null,
-                              ),
+                          style: Theme.of(context).textTheme.titleMedium,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -915,7 +910,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                         const Padding(
                           padding: EdgeInsets.only(left: AppSpacing.sm),
                           child: Tooltip(
-                            message: 'Already marked for this session',
+                            message: 'Existing record - changes will update it',
                             child: Icon(
                               Icons.check_circle,
                               color: Colors.green,
@@ -936,7 +931,6 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                     vertical: AppSpacing.xs,
                   ),
                   visualDensity: VisualDensity.compact,
-                  enabled: !alreadyMarked,
                 ),
               ),
               if (!isLastItem)
