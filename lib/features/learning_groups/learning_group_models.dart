@@ -173,7 +173,7 @@ class LearningGroupComment {
     final first = (author['firstName'] ?? '').toString();
     final last = (author['lastName'] ?? '').toString();
     return LearningGroupComment(
-      id: _toInt(json['id']),
+      id: _toInt(json['commentId'] ?? json['id']),
       content: (json['content'] ?? '').toString(),
       authorName: '$first $last'.trim().isEmpty ? 'Unknown' : '$first $last'.trim(),
       createdAt: _toDate(json['createdAt']),
