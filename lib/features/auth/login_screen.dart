@@ -141,10 +141,19 @@ class _LoginScreenState extends State<LoginScreen>
     });
 
     try {
+      UniversityModel? selectedUniversityModel;
+      for (final university in _universities) {
+        if (university.name == selectedUniversity) {
+          selectedUniversityModel = university;
+          break;
+        }
+      }
+
       await _authService.login(
         universityName: selectedUniversity,
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
+        universityLogoUrl: selectedUniversityModel?.logoUrl,
       );
 
       if (!mounted) {

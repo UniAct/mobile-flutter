@@ -446,7 +446,7 @@ class _GroupSelector extends StatelessWidget {
     if (groups.isEmpty) return const SizedBox.shrink();
 
     return SizedBox(
-      height: 98,
+      height: 112,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: groups.length,
@@ -477,11 +477,15 @@ class _GroupSelector extends StatelessWidget {
                     style: const TextStyle(fontWeight: FontWeight.w900),
                   ),
                   const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    group.course.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium,
+                  Expanded(
+                    child: Text(
+                      group.course.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        height: 1.15,
+                      ),
+                    ),
                   ),
                 ],
               ),

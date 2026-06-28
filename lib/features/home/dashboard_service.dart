@@ -19,6 +19,7 @@ class DashboardService {
       final response = await _apiClient.get('/attendance/mobile/dashboard');
       final data = _extractData(response);
       final dashboard = DashboardData.fromJson(data);
+      await _refreshUniversityLogo();
 
       try {
         await _localStorage.saveDashboardCache(jsonEncode(data));
@@ -78,5 +79,21 @@ class DashboardService {
     }
 
     return <String, dynamic>{};
+  }
+
+  Future<void> _refreshUniversityLogo() async {
+    try {
+      final response = await _apiClient.get('/university/settings');
+      final data = response is Map<String, dynamic>
+          ? response['data'] ?? response
+          : null;
+      final logoUrl = data is Map<String, dynamic>
+          ? data['logo_url'] ?? data['logoUrl']
+          : null;
+
+      await _localStorage.saveUniversityLogoUrl(logoUrl?.toString());
+    } catch (e) {
+      debugPrint('[DashboardService] Logo refresh failed (non-fatal): $e');
+    }
   }
 }

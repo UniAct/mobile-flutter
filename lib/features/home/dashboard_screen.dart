@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mobile_flutter/core/theme/app_theme.dart';
+import 'package:mobile_flutter/core/widgets/tenant_logo.dart';
 import 'package:mobile_flutter/features/auth/user_model.dart';
 import 'package:mobile_flutter/features/home/dashboard_models.dart';
 
@@ -246,8 +247,9 @@ class _HeroGreeting extends StatelessWidget {
                     color: Colors.white.withValues(alpha: 0.18),
                     shape: BoxShape.circle,
                   ),
-                  child: Image.asset(
-                    'assets/images/logo.png',
+                  child: TenantLogo(
+                    width: logoSize,
+                    height: logoSize,
                     filterQuality: FilterQuality.high,
                   ),
                 ),

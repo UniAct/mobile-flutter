@@ -13,6 +13,7 @@ class AuthService {
     required String universityName,
     required String email,
     required String password,
+    String? universityLogoUrl,
   }) async {
     if (universityName.isEmpty) {
       throw Exception('No university selected');
@@ -30,8 +31,27 @@ class AuthService {
       throw Exception('Login succeeded but token is missing in response');
     }
 
-    await _localStorage.saveUniversityName(universityName);
     await _localStorage.saveToken(token);
+    await _localStorage.saveUniversityName(universityName);
+    await _refreshUniversityLogo(fallbackLogoUrl: universityLogoUrl);
+  }
+
+  Future<void> _refreshUniversityLogo({String? fallbackLogoUrl}) async {
+    try {
+      final response = await _apiClient.get('/university/settings');
+      final data = response is Map<String, dynamic>
+          ? response['data'] ?? response
+          : null;
+      final logoUrl = data is Map<String, dynamic>
+          ? data['logo_url'] ?? data['logoUrl']
+          : null;
+
+      await _localStorage.saveUniversityLogoUrl(
+        logoUrl?.toString() ?? fallbackLogoUrl,
+      );
+    } catch (_) {
+      await _localStorage.saveUniversityLogoUrl(fallbackLogoUrl);
+    }
   }
 
   Future<void> logout() async {

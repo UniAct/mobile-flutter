@@ -4,6 +4,7 @@ import 'package:mobile_flutter/core/security/security_service.dart';
 class LocalStorage {
   static const String _tokenKey = 'token';
   static const String _universityKey = 'university_name';
+  static const String _universityLogoUrlKey = 'university_logo_url';
   static const String _dashboardCacheKey = 'dashboard_cache_json';
   static const String _dashboardCacheTimestampKey = 'dashboard_cache_ts';
   static const String _timetableCacheKey = 'timetable_cache_json';
@@ -52,10 +53,32 @@ class LocalStorage {
     await prefs.setString(_universityKey, universityName);
   }
 
+  Future<void> saveUniversityLogoUrl(String? logoUrl) async {
+    final prefs = await _prefs;
+    final cleanLogoUrl = logoUrl?.trim();
+
+    if (cleanLogoUrl == null || cleanLogoUrl.isEmpty) {
+      await prefs.remove(_universityLogoUrlKey);
+      return;
+    }
+
+    await prefs.setString(_universityLogoUrlKey, cleanLogoUrl);
+  }
+
   Future<String?> getUniversityName() async {
     try {
       final prefs = await _prefs;
       return prefs.getString(_universityKey);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<String?> getUniversityLogoUrl() async {
+    try {
+      final prefs = await _prefs;
+      final value = prefs.getString(_universityLogoUrlKey)?.trim();
+      return value == null || value.isEmpty ? null : value;
     } catch (_) {
       return null;
     }
@@ -68,6 +91,7 @@ class LocalStorage {
   Future<void> clearUniversityName() async {
     final prefs = await _prefs;
     await prefs.remove(_universityKey);
+    await prefs.remove(_universityLogoUrlKey);
   }
 
   Future<void> saveDashboardCache(String jsonString) async {
